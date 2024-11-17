@@ -1,0 +1,13 @@
+# @package _global_
+
+jit: false
+
+writers:
+  - jsonl
+  - tensorboard
+
+training:
+  episode_length: 100
+  render_episodes: 0
+  num_evals: 2
+  num_timesteps: 10000
