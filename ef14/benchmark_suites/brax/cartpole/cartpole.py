@@ -8,7 +8,6 @@ from brax.envs import register_environment
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 
-from ef14.algorithms.state_sampler import StateSampler
 from ef14.benchmark_suites import rewards
 
 
@@ -54,10 +53,6 @@ def domain_randomization_gear(sys, rng, cfg):
     in_axes = in_axes.tree_replace({"actuator.gear": 0})
     sys = sys.tree_replace({"actuator.gear": samples})
     return sys, in_axes, samples
-
-
-def sample_state(state_sampler: StateSampler):
-    pass
 
 
 class Cartpole(PipelineEnv):
