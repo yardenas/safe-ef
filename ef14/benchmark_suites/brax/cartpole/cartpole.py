@@ -60,12 +60,11 @@ class ConstraintWrapper(Wrapper):
     def __init__(self, env: Env, slider_position_bound: float):
         assert isinstance(env, Cartpole)
         self.env = env
-        self.physics = env.env.physics
         self.slider_position_bound = slider_position_bound
 
     def step(self, action):
         observation, reward, terminal, truncated, info = self.env.step(action)
-        slider_pos = self.env.cart_position().copy()
+        slider_pos = self.env.cart_position()
         cost = (jnp.abs(slider_pos) >= self.slider_position_bound).astype(jnp.float32)
         info["cost"] = cost
         return observation, reward, terminal, truncated, info
@@ -175,7 +174,7 @@ for safe, sparse, swingup in itertools.product(
 
         def make(**kwargs):
             slider_position_bound = kwargs.pop("slider_position_bound", 0.25)
-            ConstraintWrapper(
+            return ConstraintWrapper(
                 Cartpole(sparse=sparse, swingup=swingup, **kwargs),
                 slider_position_bound,
             )

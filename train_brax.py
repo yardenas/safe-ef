@@ -63,6 +63,7 @@ def get_train_fn(cfg):
             activation=activation,
         )
         penalizer, penalizer_params = get_penalizer(cfg)
+        agent_cfg.pop("penalizer")
         train_fn = functools.partial(
             sac.train,
             **agent_cfg,
