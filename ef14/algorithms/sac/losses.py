@@ -214,7 +214,6 @@ def make_losses(
             actor_loss, penalizer_aux, penalizer_params = penalizer(
                 actor_loss, constraint, penalizer_params
             )
-            actor_loss = jnp.clip(actor_loss, a_min=-1000.0, a_max=1000.0)
             aux["constraint_estimate"] = constraint
             aux["cost"] = mean_qc.mean()
             aux["penalizer_params"] = penalizer_params
