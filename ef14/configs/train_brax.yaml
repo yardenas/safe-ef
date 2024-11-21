@@ -21,7 +21,7 @@ hydra:
 log_dir: outputs
 
 writers:
-  - wandb
+  # - wandb
   - jsonl
   - stderr
 
@@ -44,6 +44,6 @@ training:
   render: true
   num_timesteps: 1000000
   privileged: false
-  train_domain_randomization: true
-  eval_domain_randomization: true
+  train_domain_randomization: false
+  eval_domain_randomization: false
   store_policy: true

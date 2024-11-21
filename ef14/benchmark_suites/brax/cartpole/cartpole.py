@@ -59,16 +59,20 @@ def domain_randomization_gear(sys, rng, cfg):
 class ConstraintWrapper(Wrapper):
     def __init__(self, env: Env, slider_position_bound: float):
         assert isinstance(env, Cartpole)
-        self.env = env
-        self.physics = env.env.physics
+        super().__init__(env)
         self.slider_position_bound = slider_position_bound
 
-    def step(self, action):
-        observation, reward, terminal, truncated, info = self.env.step(action)
-        slider_pos = self.env.cart_position().copy()
+    def reset(self, rng: jax.Array) -> State:
+        state = self.env.reset(rng)
+        state.info["cost"] = jnp.zeros_like(state.reward)
+        return state
+
+    def step(self, state: State, action: jax.Array) -> State:
+        nstate = self.env.step(state, action)
+        slider_pos = self.env.cart_position(nstate.pipeline_state)
         cost = (jnp.abs(slider_pos) >= self.slider_position_bound).astype(jnp.float32)
-        info["cost"] = cost
-        return observation, reward, terminal, truncated, info
+        nstate.info["cost"] = cost
+        return nstate
 
 
 class Cartpole(PipelineEnv):
@@ -175,7 +179,7 @@ for safe, sparse, swingup in itertools.product(
 
         def make(**kwargs):
             slider_position_bound = kwargs.pop("slider_position_bound", 0.25)
-            ConstraintWrapper(
+            return ConstraintWrapper(
                 Cartpole(sparse=sparse, swingup=swingup, **kwargs),
                 slider_position_bound,
             )
