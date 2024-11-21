@@ -361,6 +361,7 @@ def train(
                 transitions,
                 key_critic,
                 True,
+                sac_losses.SACCost(),
                 optimizer_state=training_state.qc_optimizer_state,
             )
             cost_metrics = {
