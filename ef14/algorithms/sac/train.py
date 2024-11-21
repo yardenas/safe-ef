@@ -36,7 +36,6 @@ from brax.v1 import envs as envs_v1
 import ef14.algorithms.sac.losses as sac_losses
 import ef14.algorithms.sac.networks as sac_networks
 from ef14.algorithms.sac.penalizers import Penalizer
-from ef14.algorithms.sac.robustness import QTransformation, SACCost
 from ef14.algorithms.sac.wrappers import DomainRandomizationParams, StatePropagation
 from ef14.rl.evaluation import ConstraintsEvaluator
 
@@ -165,7 +164,6 @@ def train(
     safety_budget: float = float("inf"),
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
-    robustness: QTransformation = SACCost(),
 ):
     process_id = jax.process_index()
     local_devices_to_use = jax.local_device_count()
@@ -363,7 +361,6 @@ def train(
                 transitions,
                 key_critic,
                 True,
-                robustness,
                 optimizer_state=training_state.qc_optimizer_state,
             )
             cost_metrics = {
