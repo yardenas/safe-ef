@@ -36,7 +36,7 @@ from brax.v1 import envs as envs_v1
 import ef14.algorithms.sac.losses as sac_losses
 import ef14.algorithms.sac.networks as sac_networks
 from ef14.algorithms.sac.penalizers import Penalizer
-from ef14.algorithms.sac.robustness import SACCost
+from ef14.algorithms.sac.robustness import QTransformation, SACCost
 from ef14.algorithms.sac.wrappers import DomainRandomizationParams, StatePropagation
 from ef14.rl.evaluation import ConstraintsEvaluator
 
@@ -134,7 +134,6 @@ def train(
     num_envs: int = 1,
     num_eval_envs: int = 128,
     num_trajectories_per_env: int = 1,
-    cost_penalty: float | None = None,
     propagation: str | None = None,
     learning_rate: float = 1e-4,
     critic_learning_rate: float = 1e-4,
@@ -166,8 +165,7 @@ def train(
     safety_budget: float = float("inf"),
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
-    cost_q_transform: str | None = None,
-    cvar_confidence: float = 0.95,
+    robustness: QTransformation = SACCost(),
 ):
     process_id = jax.process_index()
     local_devices_to_use = jax.local_device_count()
@@ -279,12 +277,12 @@ def train(
     if domain_parameters is not None:
         extras["state_extras"]["domain_parameters"] = domain_parameters[0]  # type: ignore
     if safe:
-        if propagation is not None:
-            extras["state_extras"]["state_propagation"] = {  # type: ignore
-                "next_obs": jnp.tile(dummy_obs, (num_envs,) + (1,) * dummy_obs.ndim),
-                "rng": rng,
-            }
         extras["state_extras"]["cost"] = 0.0  # type: ignore
+    if propagation is not None:
+        extras["state_extras"]["state_propagation"] = {  # type: ignore
+            "next_obs": jnp.tile(dummy_obs, (num_envs,) + (1,) * dummy_obs.ndim),
+            "rng": rng,
+        }
 
     dummy_transition = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
         observation=dummy_obs,
@@ -365,7 +363,7 @@ def train(
                 transitions,
                 key_critic,
                 True,
-                SACCost(),
+                robustness,
                 optimizer_state=training_state.qc_optimizer_state,
             )
             cost_metrics = {
@@ -397,10 +395,10 @@ def train(
         else:
             new_target_qc_params = None
         if aux:
-            new_penalizer_params = aux.pop("penalizer_params")
             additional_metrics = {
                 **aux,
             }
+            new_penalizer_params = aux["penalizer_params"]
         else:
             new_penalizer_params = training_state.penalizer_params
             additional_metrics = {}
