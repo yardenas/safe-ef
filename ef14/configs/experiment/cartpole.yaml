@@ -3,7 +3,7 @@ defaults:
   - override /environment: cartpole
 
 training:
-  num_timesteps: 1000000
+  num_timesteps: 500000
   safe: false
   num_envs: 256
   
