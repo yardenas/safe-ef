@@ -15,14 +15,17 @@ class Penalizer(Protocol):
 
 
 class CRPO:
-    def __init__(self, eta: float) -> None:
+    def __init__(self, eta: float, cost_scale: float) -> None:
         self.eta = eta
+        self.cost_scale = cost_scale
 
     def __call__(
         self, actor_loss: jax.Array, constraint: jax.Array, params: Params
     ) -> tuple[jax.Array, dict[str, Any], Params]:
         actor_loss = jnp.where(
-            jnp.greater(constraint + self.eta, 0.0), actor_loss, -constraint
+            jnp.greater(constraint + self.eta, 0.0),
+            actor_loss,
+            -constraint * self.cost_scale,
         )
         return actor_loss, {}, params
 
