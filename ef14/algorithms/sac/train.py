@@ -404,6 +404,15 @@ def train(
             **cost_metrics,
             **additional_metrics,
         }
+        keep_still = lambda x, x_hat: jax.tree.map(
+            lambda y, y_hat: jnp.where(training_state.env_steps > 50000, y, y_hat),
+            x,
+            x_hat,
+        )
+        policy_params = keep_still(policy_params, training_state.policy_params)
+        policy_optimizer_state = keep_still(
+            policy_optimizer_state, training_state.policy_optimizer_state
+        )
 
         new_training_state = TrainingState(
             policy_optimizer_state=policy_optimizer_state,
