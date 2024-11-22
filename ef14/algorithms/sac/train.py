@@ -36,7 +36,7 @@ from brax.v1 import envs as envs_v1
 import ef14.algorithms.sac.losses as sac_losses
 import ef14.algorithms.sac.networks as sac_networks
 from ef14.algorithms.sac.penalizers import Penalizer
-from ef14.algorithms.sac.wrappers import DomainRandomizationParams, StatePropagation
+from ef14.benchmark_suites.wrappers import DomainRandomizationParams
 from ef14.rl.evaluation import ConstraintsEvaluator
 
 Metrics: TypeAlias = types.Metrics
@@ -133,7 +133,6 @@ def train(
     num_envs: int = 1,
     num_eval_envs: int = 128,
     num_trajectories_per_env: int = 1,
-    propagation: str | None = None,
     learning_rate: float = 1e-4,
     critic_learning_rate: float = 1e-4,
     cost_critic_learning_rate: float = 1e-4,
@@ -145,6 +144,7 @@ def train(
     normalize_observations: bool = False,
     max_devices_per_host: Optional[int] = None,
     reward_scaling: float = 1.0,
+    cost_scaling: float = 1.0,
     tau: float = 0.005,
     min_replay_size: int = 0,
     max_replay_size: Optional[int] = None,
@@ -185,13 +185,10 @@ def train(
     logging.info(f"Episode safety budget: {safety_budget}")
     if max_replay_size is None:
         max_replay_size = num_timesteps
-    if propagation == "standard":
-        propagation = None
-    factor = 1 if propagation is not None else num_envs
     # The number of environment steps executed for every `actor_step()` call.
-    env_steps_per_actor_step = action_repeat * factor * num_trajectories_per_env
+    env_steps_per_actor_step = action_repeat * num_trajectories_per_env
     # equals to ceil(min_replay_size / env_steps_per_actor_step)
-    num_prefill_actor_steps = -(-min_replay_size // (factor * num_trajectories_per_env))
+    num_prefill_actor_steps = -(-min_replay_size // num_trajectories_per_env)
     num_prefill_env_steps = num_prefill_actor_steps * env_steps_per_actor_step
     assert num_timesteps - num_prefill_env_steps >= 0
     num_evals_after_init = max(num_evals - 1, 1)
@@ -237,8 +234,6 @@ def train(
         domain_parameters = env.domain_parameters
     else:
         domain_parameters = None
-    if propagation is not None:
-        env = StatePropagation(env)
 
     obs_size = env.observation_size
     action_size = env.action_size
@@ -276,11 +271,6 @@ def train(
         extras["state_extras"]["domain_parameters"] = domain_parameters[0]  # type: ignore
     if safe:
         extras["state_extras"]["cost"] = 0.0  # type: ignore
-    if propagation is not None:
-        extras["state_extras"]["state_propagation"] = {  # type: ignore
-            "next_obs": jnp.tile(dummy_obs, (num_envs,) + (1,) * dummy_obs.ndim),
-            "rng": rng,
-        }
 
     dummy_transition = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
         observation=dummy_obs,
@@ -299,6 +289,7 @@ def train(
     alpha_loss, critic_loss, actor_loss = sac_losses.make_losses(
         sac_network=sac_network,
         reward_scaling=reward_scaling,
+        cost_scaling=cost_scaling,
         discounting=discounting,
         safety_discounting=safety_discounting,
         action_size=action_size,
@@ -443,8 +434,6 @@ def train(
         extra_fields = ("truncation",)
         if domain_parameters is not None:
             extra_fields += ("domain_parameters",)  # type: ignore
-        if propagation is not None:
-            extra_fields += ("state_propagation",)  # type: ignore
         if safe:
             extra_fields += ("cost",)  # type: ignore
         step = lambda state: acting.actor_step(

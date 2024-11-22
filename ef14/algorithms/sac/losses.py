@@ -83,13 +83,16 @@ class SACCost(QTransformation):
         next_q = q_fn(transitions.next_observation, next_action)
         next_v = next_q.mean(axis=-1)
         cost = transitions.extras["state_extras"]["cost"]
-        target_q = jax.lax.stop_gradient(cost + transitions.discount * gamma * next_v)
+        target_q = jax.lax.stop_gradient(
+            cost * reward_scaling + transitions.discount * gamma * next_v
+        )
         return target_q
 
 
 def make_losses(
     sac_network: SafeSACNetworks,
     reward_scaling: float,
+    cost_scaling: float,
     discounting: float,
     safety_discounting: float,
     action_size: int,
@@ -142,6 +145,7 @@ def make_losses(
             action = transitions.action
         q_network = qc_network if safe else qr_network
         gamma = safety_discounting if safe else discounting
+        f_reward_scaling = cost_scaling if safe else reward_scaling
         q_old_action = q_network.apply(
             normalizer_params, q_params, transitions.observation, action
         )
@@ -163,7 +167,7 @@ def make_losses(
             normalizer_params, target_q_params, obs, action
         )
         target_q = target_q_fn(
-            transitions, q_fn, policy, gamma, domain_params, alpha, reward_scaling
+            transitions, q_fn, policy, gamma, domain_params, alpha, f_reward_scaling
         )
         q_error = q_old_action - jnp.expand_dims(target_q, -1)
         # Better bootstrapping for truncated episodes.
