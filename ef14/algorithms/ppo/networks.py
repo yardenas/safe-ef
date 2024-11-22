@@ -23,13 +23,14 @@ from flax import linen
 
 
 @flax.struct.dataclass
-class PPONetworks:
+class SafePPONetworks:
     policy_network: networks.FeedForwardNetwork
     value_network: networks.FeedForwardNetwork
+    cost_value_network: networks.FeedForwardNetwork
     parametric_action_distribution: distribution.ParametricDistribution
 
 
-def make_inference_fn(ppo_networks: PPONetworks):
+def make_inference_fn(ppo_networks: SafePPONetworks):
     """Creates params and inference function for the PPO agent."""
 
     def make_policy(params: types.Params, deterministic: bool = False) -> types.Policy:
@@ -67,7 +68,7 @@ def make_ppo_networks(
     policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
     value_hidden_layer_sizes: Sequence[int] = (256,) * 5,
     activation: networks.ActivationFn = linen.swish,
-) -> PPONetworks:
+) -> SafePPONetworks:
     """Make PPO networks with preprocessor."""
     parametric_action_distribution = distribution.NormalTanhDistribution(
         event_size=action_size
@@ -85,9 +86,17 @@ def make_ppo_networks(
         hidden_layer_sizes=value_hidden_layer_sizes,
         activation=activation,
     )
+    # TODO (yarden): maybe softplus here?
+    cost_value_network = networks.make_value_network(
+        observation_size,
+        preprocess_observations_fn=preprocess_observations_fn,
+        hidden_layer_sizes=value_hidden_layer_sizes,
+        activation=activation,
+    )
 
-    return PPONetworks(
+    return SafePPONetworks(
         policy_network=policy_network,
         value_network=value_network,
+        cost_value_network=cost_value_network,
         parametric_action_distribution=parametric_action_distribution,
     )
