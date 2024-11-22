@@ -28,7 +28,7 @@ def get_penalizer(cfg):
             cfg.agent.penalizer.penalty_multiplier,
         )
     elif cfg.agent.penalizer.name == "crpo":
-        penalizer = CRPO(cfg.agent.penalizer.eta)
+        penalizer = CRPO(cfg.agent.penalizer.eta, cfg.agent.penalizer.cost_scale)
         penalizer_state = None
     else:
         raise ValueError(f"Unknown penalizer {cfg.agent.penalizer.name}")

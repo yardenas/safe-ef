@@ -1,0 +1,11 @@
+# @package _global_
+defaults:
+  - override /environment: cartpole
+
+training:
+  num_timesteps: 500000
+  safe: false
+  num_envs: 256
+  
+agent:
+  grad_updates_per_step: 256
