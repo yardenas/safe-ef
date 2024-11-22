@@ -18,4 +18,3 @@ grad_updates_per_step: 512
 deterministic_eval: true
 hidden_layer_sizes: [128, 128]
 activation: swish
-propagation: standard
