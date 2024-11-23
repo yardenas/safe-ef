@@ -181,14 +181,18 @@ def train(
             "No training will happen because min_replay_size >= num_timesteps"
         )
 
-    safety_budget = (safety_budget / episode_length) / (1.0 - safety_discounting)
+    safety_budget = (
+        (safety_budget / episode_length) / (1.0 - safety_discounting) * cost_scaling
+    )
     logging.info(f"Episode safety budget: {safety_budget}")
     if max_replay_size is None:
         max_replay_size = num_timesteps
     # The number of environment steps executed for every `actor_step()` call.
-    env_steps_per_actor_step = action_repeat * num_trajectories_per_env
+    env_steps_per_actor_step = action_repeat * num_envs * num_trajectories_per_env
     # equals to ceil(min_replay_size / env_steps_per_actor_step)
-    num_prefill_actor_steps = -(-min_replay_size // num_trajectories_per_env)
+    num_prefill_actor_steps = -(
+        -min_replay_size // (num_envs * num_trajectories_per_env)
+    )
     num_prefill_env_steps = num_prefill_actor_steps * env_steps_per_actor_step
     assert num_timesteps - num_prefill_env_steps >= 0
     num_evals_after_init = max(num_evals - 1, 1)
@@ -252,12 +256,16 @@ def train(
         safe=safe,
     )
     make_policy = sac_networks.make_inference_fn(sac_network)
+    make_optimizer = lambda lr, grad_clip_norm: optax.chain(
+        optax.clip_by_global_norm(grad_clip_norm),
+        optax.radam(learning_rate=lr),
+    )
 
     alpha_optimizer = optax.adam(learning_rate=3e-4)
 
-    policy_optimizer = optax.adam(learning_rate=learning_rate)
-    qr_optimizer = optax.adam(learning_rate=critic_learning_rate)
-    qc_optimizer = optax.adam(learning_rate=cost_critic_learning_rate) if safe else None
+    policy_optimizer = make_optimizer(learning_rate, 10.0)
+    qr_optimizer = make_optimizer(critic_learning_rate, 10.0)
+    qc_optimizer = make_optimizer(cost_critic_learning_rate, 10.0) if safe else None
 
     dummy_obs = jnp.zeros((obs_size,))
     dummy_action = jnp.zeros((action_size,))
@@ -400,7 +408,6 @@ def train(
             **cost_metrics,
             **additional_metrics,
         }
-
         new_training_state = TrainingState(
             policy_optimizer_state=policy_optimizer_state,
             policy_params=policy_params,

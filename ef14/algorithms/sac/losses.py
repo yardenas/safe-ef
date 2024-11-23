@@ -123,7 +123,7 @@ def make_losses(
         alpha = jnp.exp(log_alpha)
         alpha_loss = alpha * jax.lax.stop_gradient(-log_prob - target_entropy)
         alpha_loss = jnp.mean(alpha_loss)
-        return jnp.clip(alpha_loss, a_min=-10.0, a_max=10.0)
+        return alpha_loss
 
     def critic_loss(
         q_params: Params,
@@ -174,7 +174,6 @@ def make_losses(
         truncation = transitions.extras["state_extras"]["truncation"]
         q_error *= jnp.expand_dims(1 - truncation, -1)
         q_loss = 0.5 * jnp.mean(jnp.square(q_error))
-        q_loss = jnp.clip(q_loss, a_min=-1000.0, a_max=1000.0)
         return q_loss
 
     def actor_loss(
@@ -222,7 +221,6 @@ def make_losses(
             aux["cost"] = mean_qc.mean()
             aux["penalizer_params"] = penalizer_params
             aux |= penalizer_aux
-        actor_loss = jnp.clip(actor_loss, a_min=-1000.0, a_max=1000.0)
         return actor_loss, aux
 
     return alpha_loss, critic_loss, actor_loss
