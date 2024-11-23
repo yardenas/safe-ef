@@ -26,13 +26,16 @@ from brax.training import types
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.types import Params
 
+from ef14.algorithms.penalizers import Penalizer
+
 
 @flax.struct.dataclass
-class PPONetworkParams:
+class SafePPONetworkParams:
     """Contains training state for the learner."""
 
     policy: Params
     value: Params
+    cost_value: Params
 
 
 def compute_gae(
@@ -100,17 +103,23 @@ def compute_gae(
 
 
 def compute_ppo_loss(
-    params: PPONetworkParams,
+    params: SafePPONetworkParams,
     normalizer_params: Any,
     data: types.Transition,
     rng: jnp.ndarray,
     ppo_network: ppo_networks.PPONetworks,
     entropy_cost: float = 1e-4,
     discounting: float = 0.9,
+    safety_discounting: float = 0.9,
     reward_scaling: float = 1.0,
+    cost_scaling: float = 1.0,
     gae_lambda: float = 0.95,
     clipping_epsilon: float = 0.3,
     normalize_advantage: bool = True,
+    penalizer: Penalizer | None = None,
+    penalizer_params: Params | None = None,
+    safety_budget: float | None = None,
+    episode_length: int | None = None,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
     """Computes PPO loss.
 
@@ -184,9 +193,43 @@ def compute_ppo_loss(
     entropy_loss = entropy_cost * -entropy
 
     total_loss = policy_loss + v_loss + entropy_loss
-    return total_loss, {
+    aux = {
         "total_loss": total_loss,
         "policy_loss": policy_loss,
         "v_loss": v_loss,
         "entropy_loss": entropy_loss,
     }
+    if penalizer is not None:
+        cost_value_apply = ppo_network.cost_value_network.apply
+        cost = data.extras["state_extras"]["cost"] * cost_scaling
+        cost_baseline = cost_value_apply(
+            normalizer_params, params.cost_value, data.observation
+        )
+        cost_bootstrap_value = cost_value_apply(
+            normalizer_params, params.cost_value, data.next_observation[-1]
+        )
+        vcs, cost_advantages = compute_gae(
+            truncation=truncation,
+            termination=termination,
+            rewards=cost,
+            values=cost_baseline,
+            bootstrap_value=cost_bootstrap_value,
+            lambda_=gae_lambda,
+            discount=safety_discounting,
+        )
+        cost_advantages -= cost_advantages.mean()
+        cost_advantages *= rho_s
+        cost_v_error = vcs - cost_baseline
+        cost_v_loss = jnp.mean(cost_v_error * cost_v_error) * 0.5 * 0.5
+        cumulative_cost = cost.sum(axis=1).mean()
+        constraint = safety_budget - cumulative_cost * episode_length / cost.shape[1]
+        policy_loss, penalizer_aux, penalizer_params = penalizer(
+            policy_loss,
+            constraint,
+            (cost_advantages, jax.lax.stop_gradient(penalizer_params)),
+        )
+        total_loss = policy_loss + v_loss + entropy_loss + cost_v_loss
+        aux["constraint_estimate"] = constraint
+        aux["penalizer_params"] = penalizer_params
+        aux |= penalizer_aux
+    return total_loss, aux

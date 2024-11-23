@@ -9,7 +9,11 @@ from omegaconf import OmegaConf
 
 import ef14.algorithms.sac.networks as sac_networks
 from ef14 import benchmark_suites
-from ef14.algorithms.sac.penalizers import CRPO, AugmentedLagrangian, LagrangianParams
+from ef14.algorithms.penalizers import (
+    CRPO,
+    AugmentedLagrangian,
+    AugmentedLagrangianParams,
+)
 from ef14.common.logging import TrainingLogger
 
 _LOG = logging.getLogger(__name__)
@@ -23,7 +27,7 @@ def get_state_path() -> str:
 def get_penalizer(cfg):
     if cfg.agent.penalizer.name == "lagrangian":
         penalizer = AugmentedLagrangian(cfg.agent.penalizer.penalty_multiplier_factor)
-        penalizer_state = LagrangianParams(
+        penalizer_state = AugmentedLagrangianParams(
             cfg.agent.penalizer.lagrange_multiplier,
             cfg.agent.penalizer.penalty_multiplier,
         )

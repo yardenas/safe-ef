@@ -23,8 +23,8 @@ import jax.numpy as jnp
 from brax.training import types
 from brax.training.types import Params, PRNGKey
 
+from ef14.algorithms.penalizers import Penalizer
 from ef14.algorithms.sac.networks import SafeSACNetworks
-from ef14.algorithms.sac.penalizers import Penalizer
 
 Transition: TypeAlias = types.Transition
 
@@ -215,7 +215,7 @@ def make_losses(
             mean_qc = jnp.mean(qc_action, axis=-1)
             constraint = safety_budget - mean_qc.mean()
             actor_loss, penalizer_aux, penalizer_params = penalizer(
-                actor_loss, constraint, penalizer_params
+                actor_loss, constraint, jax.lax.stop_gradient(penalizer_params)
             )
             aux["constraint_estimate"] = constraint
             aux["cost"] = mean_qc.mean()

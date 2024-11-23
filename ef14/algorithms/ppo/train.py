@@ -19,7 +19,7 @@ See: https://arxiv.org/pdf/1707.06347.pdf
 
 import functools
 import time
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, TypeAlias, Union
 
 import flax
 import jax
@@ -35,11 +35,12 @@ from brax.v1 import envs as envs_v1
 from etils import epath
 from orbax import checkpoint as ocp
 
+from ef14.algorithms.penalizers import Penalizer
 from ef14.algorithms.ppo import losses as ppo_losses
 from ef14.algorithms.ppo import networks as ppo_networks
 
-InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
-Metrics = types.Metrics
+InferenceParams: TypeAlias = Tuple[running_statistics.NestedMeanStd, Params]
+Metrics: TypeAlias = types.Metrics
 
 _PMAP_AXIS_NAME = "i"
 
@@ -49,8 +50,9 @@ class TrainingState:
     """Contains training state for the learner."""
 
     optimizer_state: optax.OptState
-    params: ppo_losses.PPONetworkParams
+    params: ppo_losses.SafePPONetworkParams
     normalizer_params: running_statistics.RunningStatisticsState
+    penalizer_params: Params
     env_steps: jnp.ndarray
 
 
@@ -90,6 +92,7 @@ def train(
     num_resets_per_eval: int = 0,
     normalize_observations: bool = False,
     reward_scaling: float = 1.0,
+    cost_scaling: float = 1.0,
     clipping_epsilon: float = 0.3,
     gae_lambda: float = 0.95,
     deterministic_eval: bool = False,
@@ -104,6 +107,9 @@ def train(
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
     ] = None,
     restore_checkpoint_path: Optional[str] = None,
+    safety_budget: float = float("inf"),
+    penalizer: Penalizer | None = None,
+    penalizer_params: Params | None = None,
 ):
     assert batch_size * num_minibatches % num_envs == 0
     xt = time.time()
@@ -147,7 +153,7 @@ def train(
     local_key, key_env, eval_key = jax.random.split(local_key, 3)
     # key_networks should be global, so that networks are initialized the same
     # way for different processes.
-    key_policy, key_value = jax.random.split(global_key)
+    key_policy, key_value, key_cost_value = jax.random.split(global_key, 3)
     del global_key
 
     assert num_envs % device_count == 0
@@ -191,10 +197,16 @@ def train(
         ppo_network=ppo_network,
         entropy_cost=entropy_cost,
         discounting=discounting,
+        safety_discounting=safety_discounting,
         reward_scaling=reward_scaling,
+        cost_scaling=cost_scaling,
         gae_lambda=gae_lambda,
         clipping_epsilon=clipping_epsilon,
         normalize_advantage=normalize_advantage,
+        penalizer=penalizer,
+        penalizer_params=penalizer_params,
+        safety_budget=safety_budget,
+        episode_length=episode_length,
     )
 
     gradient_update_fn = gradients.gradient_update_fn(
@@ -208,11 +220,11 @@ def train(
     ):
         optimizer_state, params, key = carry
         key, key_loss = jax.random.split(key)
-        (_, metrics), params, optimizer_state = gradient_update_fn(
+        (_, aux), params, optimizer_state = gradient_update_fn(
             params, normalizer_params, data, key_loss, optimizer_state=optimizer_state
         )
 
-        return (optimizer_state, params, key), metrics
+        return (optimizer_state, params, key), aux
 
     def sgd_step(
         carry,
@@ -229,13 +241,13 @@ def train(
             return x
 
         shuffled_data = jax.tree_util.tree_map(convert_data, data)
-        (optimizer_state, params, _), metrics = jax.lax.scan(
+        (optimizer_state, params, _), aux = jax.lax.scan(
             functools.partial(minibatch_step, normalizer_params=normalizer_params),
             (optimizer_state, params, key_grad),
             shuffled_data,
             length=num_minibatches,
         )
-        return (optimizer_state, params, key), metrics
+        return (optimizer_state, params, key), aux
 
     def training_step(
         carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t
@@ -284,7 +296,7 @@ def train(
             pmap_axis_name=_PMAP_AXIS_NAME,
         )
 
-        (optimizer_state, params, _), metrics = jax.lax.scan(
+        (optimizer_state, params, _), aux = jax.lax.scan(
             functools.partial(sgd_step, data=data, normalizer_params=normalizer_params),
             (training_state.optimizer_state, training_state.params, key_sgd),
             (),
@@ -295,9 +307,10 @@ def train(
             optimizer_state=optimizer_state,
             params=params,
             normalizer_params=normalizer_params,
+            penalizer_params=aux.pop("penalizer_params", None),
             env_steps=training_state.env_steps + env_step_per_training_step,
-        )
-        return (new_training_state, state, new_key), metrics
+        )  # type: ignore
+        return (new_training_state, state, new_key), aux
 
     def training_epoch(
         training_state: TrainingState, state: envs.State, key: PRNGKey
@@ -317,7 +330,7 @@ def train(
     def training_epoch_with_timing(
         training_state: TrainingState, env_state: envs.State, key: PRNGKey
     ) -> Tuple[TrainingState, envs.State, Metrics]:
-        nonlocal training_walltime
+        nonlocal training_walltime  # type: ignore
         t = time.time()
         training_state, env_state = _strip_weak_type((training_state, env_state))
         result = training_epoch(training_state, env_state, key)
@@ -345,10 +358,11 @@ def train(
         )  # pytype: disable=bad-return-type  # py311-upgrade
 
     # Initialize model params and training state.
-    init_params = ppo_losses.PPONetworkParams(
+    init_params = ppo_losses.SafePPONetworkParams(
         policy=ppo_network.policy_network.init(key_policy),
         value=ppo_network.value_network.init(key_value),
-    )
+        cost_value=ppo_network.cost_value_network.init(key_cost_value),
+    )  # type: ignore
 
     training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
         optimizer_state=optimizer.init(
@@ -359,7 +373,8 @@ def train(
             specs.Array(env_state.obs.shape[-1:], jnp.dtype("float32"))
         ),
         env_steps=0,
-    )
+        penalizer_params=penalizer_params,
+    )  # type: ignore
 
     if (
         restore_checkpoint_path is not None
@@ -367,13 +382,15 @@ def train(
     ):
         logging.info("restoring from checkpoint %s", restore_checkpoint_path)
         orbax_checkpointer = ocp.PyTreeCheckpointer()
-        target = training_state.normalizer_params, init_params
+        target = training_state.normalizer_params, init_params, penalizer_params
         (normalizer_params, init_params) = orbax_checkpointer.restore(
             restore_checkpoint_path, item=target
         )
-        training_state = training_state.replace(
-            normalizer_params=normalizer_params, params=init_params
-        )
+        training_state = training_state.replace(  # type: ignore
+            normalizer_params=normalizer_params,
+            params=init_params,
+            penalizer_params=penalizer_params,
+        )  # type: ignore
 
     if num_timesteps == 0:
         return (
@@ -429,8 +446,8 @@ def train(
         logging.info(metrics)
         progress_fn(0, metrics)
 
-    training_metrics = {}
-    training_walltime = 0
+    training_metrics: Metrics = {}
+    training_walltime = 0.0
     current_step = 0
     for it in range(num_evals_after_init):
         logging.info("starting iteration %s %s", it, time.time() - xt)
