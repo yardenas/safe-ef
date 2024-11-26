@@ -7,7 +7,6 @@ import jax
 from brax.io import model
 from omegaconf import OmegaConf
 
-import ef14.algorithms.sac.networks as sac_networks
 from ef14 import benchmark_suites
 from ef14.algorithms.penalizers import (
     CRPO,
@@ -43,6 +42,7 @@ def get_train_fn(cfg):
     if cfg.agent.name == "sac":
         import jax.nn as jnn
 
+        import ef14.algorithms.sac.networks as sac_networks
         import ef14.algorithms.sac.train as sac
 
         agent_cfg = dict(cfg.agent)
@@ -81,6 +81,7 @@ def get_train_fn(cfg):
     elif cfg.agent.name == "ppo":
         import jax.nn as jnn
 
+        import ef14.algorithms.ppo.networks as ppo_networks
         import ef14.algorithms.ppo.train as ppo
 
         agent_cfg = dict(cfg.agent)
@@ -96,12 +97,14 @@ def get_train_fn(cfg):
                 "store_policy",
             ]
         }
-        hidden_layer_sizes = agent_cfg.pop("hidden_layer_sizes")
+        policy_hidden_layer_sizes = agent_cfg.pop("policy_hidden_layer_sizes")
+        value_hidden_layer_sizes = agent_cfg.pop("value_hidden_layer_sizes")
         activation = getattr(jnn, agent_cfg.pop("activation"))
         del agent_cfg["name"]
         network_factory = functools.partial(
-            sac_networks.make_sac_networks,
-            hidden_layer_sizes=hidden_layer_sizes,
+            ppo_networks.make_ppo_networks,
+            policy_hidden_layer_sizes=policy_hidden_layer_sizes,
+            value_hidden_layer_sizes=value_hidden_layer_sizes,
             activation=activation,
         )
         penalizer, penalizer_params = get_penalizer(cfg)
