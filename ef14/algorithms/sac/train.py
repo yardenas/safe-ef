@@ -35,7 +35,7 @@ from brax.v1 import envs as envs_v1
 
 import ef14.algorithms.sac.losses as sac_losses
 import ef14.algorithms.sac.networks as sac_networks
-from ef14.algorithms.sac.penalizers import Penalizer
+from ef14.algorithms.penalizers import Penalizer
 from ef14.benchmark_suites.wrappers import DomainRandomizationParams
 from ef14.rl.evaluation import ConstraintsEvaluator
 
