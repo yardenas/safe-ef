@@ -1,11 +1,13 @@
 # @package _global_
 defaults:
   - override /environment: cartpole
+  - override /agent: sac
 
 training:
   num_timesteps: 500000
-  safe: false
+  safe: true
   num_envs: 256
+  safety_budget: 75
   
 agent:
   grad_updates_per_step: 256
