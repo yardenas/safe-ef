@@ -56,6 +56,7 @@ def get_train_fn(cfg):
                 "eval_domain_randomization",
                 "render",
                 "store_policy",
+                "num_resets_per_eval",
             ]
         }
         hidden_layer_sizes = agent_cfg.pop("hidden_layer_sizes")
@@ -74,6 +75,43 @@ def get_train_fn(cfg):
             **training_cfg,
             network_factory=network_factory,
             checkpoint_logdir=f"{get_state_path()}/ckpt",
+            penalizer=penalizer,
+            penalizer_params=penalizer_params,
+        )
+    elif cfg.agent.name == "ppo":
+        import jax.nn as jnn
+
+        import ef14.algorithms.ppo.train as ppo
+
+        agent_cfg = dict(cfg.agent)
+        training_cfg = {
+            k: v
+            for k, v in cfg.training.items()
+            if k
+            not in [
+                "render_episodes",
+                "train_domain_randomization",
+                "eval_domain_randomization",
+                "render",
+                "store_policy",
+            ]
+        }
+        hidden_layer_sizes = agent_cfg.pop("hidden_layer_sizes")
+        activation = getattr(jnn, agent_cfg.pop("activation"))
+        del agent_cfg["name"]
+        network_factory = functools.partial(
+            sac_networks.make_sac_networks,
+            hidden_layer_sizes=hidden_layer_sizes,
+            activation=activation,
+        )
+        penalizer, penalizer_params = get_penalizer(cfg)
+        agent_cfg.pop("penalizer")
+        train_fn = functools.partial(
+            ppo.train,
+            **agent_cfg,
+            **training_cfg,
+            network_factory=network_factory,
+            restore_checkpoint_path=f"{get_state_path()}/ckpt",
             penalizer=penalizer,
             penalizer_params=penalizer_params,
         )
