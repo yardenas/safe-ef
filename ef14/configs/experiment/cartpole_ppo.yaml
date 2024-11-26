@@ -1,0 +1,18 @@
+# @package _global_
+defaults:
+  - override /environment: cartpole
+
+training:
+  num_timesteps: 2000000
+  safe: true
+  num_envs: 2048
+  safety_budget: 75
+  
+agent:
+  normalize_observations: true
+  num_minibatches: 32
+  num_updates_per_batch: 4
+  discounting: 0.99
+  batch_size: 1024
+  entropy_cost: 1e-2
+  learning_rate: 3e-4
