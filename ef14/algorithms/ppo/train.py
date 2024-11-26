@@ -110,8 +110,13 @@ def train(
     safety_budget: float = float("inf"),
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
+    safe: bool = False,
+    privileged: bool = False,
 ):
     assert batch_size * num_minibatches % num_envs == 0
+    if not safe:
+        penalizer = None
+        penalizer_params = None
     xt = time.time()
     process_count = jax.process_count()
     process_id = jax.process_index()
@@ -262,6 +267,9 @@ def train(
                 training_state.params.value,
             )
         )
+        extra_fields = ("truncation",)
+        if safe:
+            extra_fields += ("cost",)  # type: ignore
 
         def f(carry, unused_t):
             current_state, current_key = carry
@@ -272,7 +280,7 @@ def train(
                 policy,
                 current_key,
                 unroll_length,
-                extra_fields=("truncation",),
+                extra_fields=extra_fields,
             )
             return (next_state, next_key), data
 

@@ -38,7 +38,7 @@ training:
   seed: 0
   num_evals: 25
   episode_length: 1000
-  num_envs: 2048
+  num_envs: 512
   num_eval_envs: 128
   action_repeat: 1
   render: true
@@ -47,3 +47,4 @@ training:
   train_domain_randomization: false
   eval_domain_randomization: false
   store_policy: true
+  num_resets_per_eval: 0
