@@ -437,6 +437,7 @@ def train(
         action_repeat=action_repeat,
         key=eval_key,
     )
+
     # Run initial eval
     metrics = {}
     if process_id == 0 and num_evals > 1:

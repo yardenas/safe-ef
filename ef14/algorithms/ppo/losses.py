@@ -221,8 +221,7 @@ def compute_ppo_loss(
         cost_advantages *= rho_s
         cost_v_error = vcs - cost_baseline
         cost_v_loss = jnp.mean(cost_v_error * cost_v_error) * 0.5 * 0.5
-        cumulative_cost = cost.sum(axis=1).mean()
-        constraint = safety_budget - cumulative_cost * episode_length / cost.shape[1]
+        constraint = safety_budget - vcs.mean()
         policy_loss, penalizer_aux, penalizer_params = penalizer(
             policy_loss,
             constraint,
