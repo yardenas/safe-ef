@@ -38,7 +38,8 @@ from orbax import checkpoint as ocp
 from ef14.algorithms.penalizers import Penalizer
 from ef14.algorithms.ppo import losses as ppo_losses
 from ef14.algorithms.ppo import networks as ppo_networks
-from ef14.rl.evaluation import ConstraintEvalWrapper, ConstraintsEvaluator
+from ef14.benchmark_suites.wrappers import TrackOnlineCosts
+from ef14.rl.evaluation import ConstraintsEvaluator
 
 InferenceParams: TypeAlias = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics: TypeAlias = types.Metrics
@@ -185,7 +186,7 @@ def train(
             randomization_fn=v_randomization_fn,
         )
     if safe:
-        env = ConstraintEvalWrapper(env)
+        env = TrackOnlineCosts(env)
 
     reset_fn = jax.jit(jax.vmap(env.reset))
     key_envs = jax.random.split(key_env, num_envs // process_count)
@@ -272,7 +273,7 @@ def train(
         )
         extra_fields = ("truncation",)
         if safe:
-            extra_fields += ("cost", "eval_metrics")  # type: ignore
+            extra_fields += ("cost", "cumulative_cost")  # type: ignore
 
         def f(carry, unused_t):
             current_state, current_key = carry
