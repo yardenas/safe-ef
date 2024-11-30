@@ -134,9 +134,6 @@ def train(
         local_device_count,
         local_devices_to_use,
     )
-    safety_budget = (
-        (safety_budget / episode_length) / (1.0 - safety_discounting) * cost_scaling
-    )
     device_count = local_devices_to_use * process_count
     # The number of environment steps executed for every training step.
     env_step_per_training_step = (
