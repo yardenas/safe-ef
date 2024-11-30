@@ -8,7 +8,6 @@ training:
   safe: true
   num_envs: 2048
   safety_budget: 75
-  action_repeat: 2
   
 agent:
   normalize_observations: true
