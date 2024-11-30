@@ -38,6 +38,7 @@ from orbax import checkpoint as ocp
 from ef14.algorithms.penalizers import Penalizer
 from ef14.algorithms.ppo import losses as ppo_losses
 from ef14.algorithms.ppo import networks as ppo_networks
+from ef14.rl.evaluation import ConstraintsEvaluator
 
 InferenceParams: TypeAlias = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics: TypeAlias = types.Metrics
@@ -428,8 +429,7 @@ def train(
             action_repeat=action_repeat,
             randomization_fn=v_randomization_fn,
         )
-
-    evaluator = acting.Evaluator(
+    evaluator = ConstraintsEvaluator(
         eval_env,
         functools.partial(make_policy, deterministic=deterministic_eval),
         num_eval_envs=num_eval_envs,
@@ -437,7 +437,6 @@ def train(
         action_repeat=action_repeat,
         key=eval_key,
     )
-
     # Run initial eval
     metrics = {}
     if process_id == 0 and num_evals > 1:
