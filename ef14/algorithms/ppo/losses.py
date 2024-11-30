@@ -114,6 +114,7 @@ def compute_ppo_loss(
     reward_scaling: float = 1.0,
     cost_scaling: float = 1.0,
     gae_lambda: float = 0.95,
+    safety_gae_lambda: float = 0.95,
     clipping_epsilon: float = 0.3,
     normalize_advantage: bool = True,
     penalizer: Penalizer | None = None,
@@ -214,14 +215,14 @@ def compute_ppo_loss(
             rewards=cost,
             values=cost_baseline,
             bootstrap_value=cost_bootstrap_value,
-            lambda_=gae_lambda,
+            lambda_=safety_gae_lambda,
             discount=safety_discounting,
         )
         cost_advantages -= cost_advantages.mean()
         cost_advantages *= rho_s
         cost_v_error = vcs - cost_baseline
         cost_v_loss = jnp.mean(cost_v_error * cost_v_error) * 0.5 * 0.5
-        constraint = safety_budget - cost_baseline.mean()
+        constraint = safety_budget - vcs.mean()
         policy_loss, penalizer_aux, penalizer_params = penalizer(
             policy_loss,
             constraint,
