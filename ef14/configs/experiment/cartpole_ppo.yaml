@@ -4,7 +4,7 @@ defaults:
   - override /agent: ppo
 
 training:
-  num_timesteps: 15000000
+  num_timesteps: 100000000
   safe: true
   num_envs: 2048
   safety_budget: 75
@@ -19,5 +19,6 @@ agent:
   num_updates_per_batch: 16
   discounting: 0.99
   batch_size: 1024
-  entropy_cost: 0.5
+  entropy_cost: 0.2
   learning_rate: 3e-4
+  safety_gae_lambda: 0.65

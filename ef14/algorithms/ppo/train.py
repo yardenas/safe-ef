@@ -220,7 +220,6 @@ def train(
         penalizer=penalizer,
         penalizer_params=penalizer_params,
         safety_budget=safety_budget,
-        episode_length=episode_length,
     )
 
     gradient_update_fn = gradients.gradient_update_fn(

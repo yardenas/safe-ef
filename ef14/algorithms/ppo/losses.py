@@ -120,7 +120,6 @@ def compute_ppo_loss(
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
     safety_budget: float | None = None,
-    episode_length: int | None = None,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
     """Computes PPO loss.
 
