@@ -73,7 +73,7 @@ class ConstraintWrapper(Wrapper):
         cost = (jnp.abs(slider_pos) >= self.slider_position_bound).astype(jnp.float32)
         nstate.info["cost"] = cost
         cumulative_cost = jnp.where(
-            state.done,
+            nstate.done,
             jnp.zeros_like(state.reward),
             state.info["cumulative_cost"] + cost,
         )
