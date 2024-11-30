@@ -218,6 +218,12 @@ def compute_ppo_loss(
             discount=safety_discounting,
         )
         cost_advantages -= cost_advantages.mean()
+        cost_loss1 = rho_s * cost_advantages
+        cost_loss2 = (
+            jnp.clip(rho_s, 1 - clipping_epsilon, 1 + clipping_epsilon)
+            * cost_advantages
+        )
+        cost_loss = -jnp.mean(jnp.minimum(cost_loss1, cost_loss2))
         cost_advantages *= rho_s
         cost_v_error = vcs - cost_baseline
         cost_v_loss = jnp.mean(cost_v_error * cost_v_error) * 0.5 * 0.5
@@ -226,7 +232,7 @@ def compute_ppo_loss(
             policy_loss,
             constraint,
             jax.lax.stop_gradient(penalizer_params),
-            rest=-cost_advantages.mean(),
+            rest=cost_loss,
         )
         total_loss = policy_loss + v_loss + entropy_loss + cost_v_loss
         aux["constraint_estimate"] = constraint
