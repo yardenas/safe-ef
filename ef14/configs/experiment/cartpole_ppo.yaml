@@ -8,6 +8,10 @@ training:
   safe: true
   num_envs: 2048
   safety_budget: 75
+
+environment:
+  task_params:
+    swingup: false
   
 agent:
   normalize_observations: true
