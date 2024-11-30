@@ -227,7 +227,7 @@ def compute_ppo_loss(
             policy_loss,
             constraint,
             jax.lax.stop_gradient(penalizer_params),
-            cost_advantages=cost_advantages,
+            rest=cost_advantages.mean(),
         )
         total_loss = policy_loss + v_loss + entropy_loss + cost_v_loss
         aux["constraint_estimate"] = constraint

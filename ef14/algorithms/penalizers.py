@@ -10,7 +10,7 @@ Params = TypeVar("Params")
 
 class Penalizer(Protocol):
     def __call__(
-        self, actor_loss: jax.Array, constraint: jax.Array, params: Params, **kwargs
+        self, actor_loss: jax.Array, constraint: jax.Array, params: Params, *, rest: Any
     ) -> tuple[jax.Array, dict[str, Any], Params]:
         ...
 
@@ -21,12 +21,16 @@ class CRPO:
         self.cost_scale = cost_scale
 
     def __call__(
-        self, actor_loss: jax.Array, constraint: jax.Array, params: Params, **kwargs
+        self, actor_loss: jax.Array, constraint: jax.Array, params: Params, *, rest: Any
     ) -> tuple[jax.Array, dict[str, Any], Params]:
+        if rest is not None:
+            loss_constraint = rest
+        else:
+            loss_constraint = constraint
         actor_loss = jnp.where(
             jnp.greater(constraint + self.eta, 0.0),
             actor_loss,
-            -constraint * self.cost_scale,
+            -loss_constraint * self.cost_scale,
         )
         return actor_loss, {}, params
 
@@ -45,7 +49,8 @@ class AugmentedLagrangian:
         actor_loss: jax.Array,
         constraint: jax.Array,
         params: AugmentedLagrangianParams,
-        **kwargs,
+        *,
+        rest: Any,
     ) -> tuple[jax.Array, dict[str, Any], Params]:
         psi, cond = augmented_lagrangian(constraint, *params)
         new_params = update_augmented_lagrangian(
@@ -101,8 +106,9 @@ class Lagrangian:
         constraint: jax.Array,
         params: LagrangianParams,
         *,
-        cost_advantage: jax.Array,
+        rest: Any,
     ) -> tuple[jax.Array, dict[str, Any], LagrangianParams]:
+        cost_advantage = rest
         new_lagrange_multiplier, new_optimizer_state, loss = update_lagrange_multiplier(
             constraint,
             params.lagrange_multiplier,
