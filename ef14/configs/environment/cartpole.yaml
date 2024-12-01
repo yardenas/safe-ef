@@ -1,6 +1,10 @@
 defaults:
   - brax_base
 
-task_name: cartpole_swingup_safe
+task_name: cartpole_safe
+task_params:
+  sparse: false
+  swingup: true
+  slider_position_bound: 0.25
 min: 0.0
 max: 0.1

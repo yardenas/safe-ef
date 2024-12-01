@@ -28,9 +28,11 @@ def prepare_randomization_fn(key, num_envs, cfg, task_name):
 def make_brax_envs(cfg):
     task_cfg = get_task_config(cfg)
     train_env = envs.get_environment(
-        task_cfg.task_name, backend=cfg.environment.backend
+        task_cfg.task_name, backend=cfg.environment.backend, **task_cfg.task_params
     )
-    eval_env = envs.get_environment(task_cfg.task_name, backend=cfg.environment.backend)
+    eval_env = envs.get_environment(
+        task_cfg.task_name, backend=cfg.environment.backend, **task_cfg.task_params
+    )
     train_key, eval_key = jax.random.split(jax.random.PRNGKey(cfg.training.seed))
     train_randomization_fn = (
         prepare_randomization_fn(
@@ -61,17 +63,10 @@ def make_brax_envs(cfg):
 
 randomization_fns = {
     "cartpole_swingup": cartpole.domain_randomization,
-    "cartpole_swingup_sparse": cartpole.domain_randomization,
-    "cartpole_balance": cartpole.domain_randomization,
+    "cartpole_safe": cartpole.domain_randomization,
 }
 
 render_fns = {
-    "cartpole_swingup": brax.render,
-    "cartpole_swingup_safe": brax.render,
-    "cartpole_swingup_sparse": brax.render,
-    "cartpole_balance": brax.render,
-    "cartpole_balance_safe": brax.render,
-    "cartpole_balance_sparse": brax.render,
-    "cartpole_balance_sparse_safe": brax.render,
-    "cartpole_swingup_sparse_safe": brax.render,
+    "cartpole": brax.render,
+    "cartpole_safe": brax.render,
 }

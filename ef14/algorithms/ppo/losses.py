@@ -114,12 +114,12 @@ def compute_ppo_loss(
     reward_scaling: float = 1.0,
     cost_scaling: float = 1.0,
     gae_lambda: float = 0.95,
+    safety_gae_lambda: float = 0.95,
     clipping_epsilon: float = 0.3,
     normalize_advantage: bool = True,
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
     safety_budget: float | None = None,
-    episode_length: int | None = None,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
     """Computes PPO loss.
 
@@ -214,23 +214,25 @@ def compute_ppo_loss(
             rewards=cost,
             values=cost_baseline,
             bootstrap_value=cost_bootstrap_value,
-            lambda_=gae_lambda,
+            lambda_=safety_gae_lambda,
             discount=safety_discounting,
         )
         cost_advantages -= cost_advantages.mean()
         cost_advantages *= rho_s
         cost_v_error = vcs - cost_baseline
         cost_v_loss = jnp.mean(cost_v_error * cost_v_error) * 0.5 * 0.5
-        cumulative_cost = cost.sum(axis=1).mean()
-        constraint = safety_budget - cumulative_cost * episode_length / cost.shape[1]
+        ongoing_costs = data.extras["state_extras"]["cumulative_cost"].max(0).mean()
+        constraint = safety_budget - vcs.mean()
         policy_loss, penalizer_aux, penalizer_params = penalizer(
             policy_loss,
             constraint,
             jax.lax.stop_gradient(penalizer_params),
-            cost_advantages=cost_advantages,
+            rest=-cost_advantages.mean(),
         )
         total_loss = policy_loss + v_loss + entropy_loss + cost_v_loss
         aux["constraint_estimate"] = constraint
         aux["penalizer_params"] = penalizer_params
+        aux["cost_v_loss"] = cost_v_loss
+        aux["ongoing_costs"] = ongoing_costs
         aux |= penalizer_aux
     return total_loss, aux

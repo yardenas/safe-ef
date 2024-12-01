@@ -38,6 +38,8 @@ from orbax import checkpoint as ocp
 from ef14.algorithms.penalizers import Penalizer
 from ef14.algorithms.ppo import losses as ppo_losses
 from ef14.algorithms.ppo import networks as ppo_networks
+from ef14.benchmark_suites.wrappers import TrackOnlineCosts
+from ef14.rl.evaluation import ConstraintsEvaluator
 
 InferenceParams: TypeAlias = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics: TypeAlias = types.Metrics
@@ -95,6 +97,7 @@ def train(
     cost_scaling: float = 1.0,
     clipping_epsilon: float = 0.3,
     gae_lambda: float = 0.95,
+    safety_gae_lambda: float = 0.95,
     deterministic_eval: bool = False,
     network_factory: types.NetworkFactory[
         ppo_networks.SafePPONetworks
@@ -117,6 +120,9 @@ def train(
     if not safe:
         penalizer = None
         penalizer_params = None
+    safety_budget = (
+        (safety_budget / episode_length) / (1.0 - safety_discounting) * cost_scaling
+    )
     xt = time.time()
     process_count = jax.process_count()
     process_id = jax.process_index()
@@ -184,6 +190,7 @@ def train(
             randomization_fn=v_randomization_fn,
         )
 
+    env = TrackOnlineCosts(env)
     reset_fn = jax.jit(jax.vmap(env.reset))
     key_envs = jax.random.split(key_env, num_envs // process_count)
     key_envs = jnp.reshape(key_envs, (local_devices_to_use, -1) + key_envs.shape[1:])
@@ -206,12 +213,12 @@ def train(
         reward_scaling=reward_scaling,
         cost_scaling=cost_scaling,
         gae_lambda=gae_lambda,
+        safety_gae_lambda=safety_gae_lambda,
         clipping_epsilon=clipping_epsilon,
         normalize_advantage=normalize_advantage,
         penalizer=penalizer,
         penalizer_params=penalizer_params,
         safety_budget=safety_budget,
-        episode_length=episode_length,
     )
 
     gradient_update_fn = gradients.gradient_update_fn(
@@ -269,7 +276,7 @@ def train(
         )
         extra_fields = ("truncation",)
         if safe:
-            extra_fields += ("cost",)  # type: ignore
+            extra_fields += ("cost", "cumulative_cost")  # type: ignore
 
         def f(carry, unused_t):
             current_state, current_key = carry
@@ -428,8 +435,7 @@ def train(
             action_repeat=action_repeat,
             randomization_fn=v_randomization_fn,
         )
-
-    evaluator = acting.Evaluator(
+    evaluator = ConstraintsEvaluator(
         eval_env,
         functools.partial(make_policy, deterministic=deterministic_eval),
         num_eval_envs=num_eval_envs,
