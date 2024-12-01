@@ -16,7 +16,7 @@ environment:
 agent:
   normalize_observations: true
   num_minibatches: 32
-  num_updates_per_batch: 16
+  num_updates_per_batch: 80
   discounting: 0.99
   batch_size: 1024
   entropy_cost: 0.2
