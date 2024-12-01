@@ -190,8 +190,7 @@ def train(
             randomization_fn=v_randomization_fn,
         )
 
-    if safe:
-        env = TrackOnlineCosts(env)
+    env = TrackOnlineCosts(env)
     reset_fn = jax.jit(jax.vmap(env.reset))
     key_envs = jax.random.split(key_env, num_envs // process_count)
     key_envs = jnp.reshape(key_envs, (local_devices_to_use, -1) + key_envs.shape[1:])
