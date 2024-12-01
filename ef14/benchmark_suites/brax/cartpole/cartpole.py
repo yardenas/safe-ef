@@ -110,10 +110,7 @@ class Cartpole(PipelineEnv):
         action = (action + 1) * (action_max - action_min) * 0.5 + action_min
         pipeline_state = self.pipeline_step(state.pipeline_state, action)
         obs = self._get_obs(pipeline_state)
-        if self.swingup:
-            done = jnp.zeros_like(state.done)
-        else:
-            done = jnp.where(jnp.abs(pipeline_state.q[1]) > 0.2, 1.0, 0.0)
+        done = jnp.zeros_like(state.done)
         return state.replace(
             pipeline_state=pipeline_state,
             obs=obs,
