@@ -64,7 +64,6 @@ class ConstraintWrapper(Wrapper):
     def reset(self, rng: jax.Array) -> State:
         state = self.env.reset(rng)
         state.info["cost"] = jnp.zeros_like(state.reward)
-        state.info["cumulative_cost"] = jnp.zeros_like(state.reward)
         return state
 
     def step(self, state: State, action: jax.Array) -> State:
@@ -72,12 +71,6 @@ class ConstraintWrapper(Wrapper):
         slider_pos = self.env.cart_position(nstate.pipeline_state)
         cost = (jnp.abs(slider_pos) >= self.slider_position_bound).astype(jnp.float32)
         nstate.info["cost"] = cost
-        cumulative_cost = jnp.where(
-            nstate.done,
-            jnp.zeros_like(state.reward),
-            state.info["cumulative_cost"] + cost,
-        )
-        nstate.info["cumulative_cost"] = cumulative_cost
         return nstate
 
 

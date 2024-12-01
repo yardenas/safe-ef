@@ -35,12 +35,12 @@ class TrackOnlineCosts(Wrapper):
         return reset_state
 
     def step(self, state: State, action: jax.Array) -> State:
-        nstate = self.env.step(state, action)
-        cost = nstate.info.get("cost", jnp.zeros_like(nstate.reward))
         cumulative_cost = jnp.where(
             state.done,
             jnp.zeros_like(state.reward),
-            state.info["cumulative_cost"] + cost,
+            state.info["cumulative_cost"],
         )
-        nstate.info["cumulative_cost"] = cumulative_cost
+        nstate = self.env.step(state, action)
+        cost = nstate.info.get("cost", jnp.zeros_like(nstate.reward))
+        nstate.info.update(cumulative_cost=cumulative_cost + cost)
         return nstate
