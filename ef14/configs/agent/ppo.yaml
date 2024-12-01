@@ -21,4 +21,4 @@ deterministic_eval: true
 normalize_advantage: true
 policy_hidden_layer_sizes: [32, 32, 32, 32]
 value_hidden_layer_sizes: [256, 256, 256, 256, 256]
-activation: swish
+activation: tanh
