@@ -44,8 +44,6 @@ from ef14.rl.evaluation import ConstraintsEvaluator
 InferenceParams: TypeAlias = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics: TypeAlias = types.Metrics
 
-_PMAP_AXIS_NAME = "i"
-
 
 @flax.struct.dataclass
 class TrainingState:
