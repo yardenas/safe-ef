@@ -1,8 +1,10 @@
-from typing import Tuple, TypeAlias
+from typing import Any, Callable, Tuple, TypeAlias
 
 import flax
+import jax
 import jax.numpy as jnp
 import optax
+from brax import envs
 from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.types import Params
@@ -25,3 +27,28 @@ class TrainingState:
 
 InferenceParams: TypeAlias = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics: TypeAlias = types.Metrics
+
+
+ErrorFeedback: TypeAlias = Callable[
+    [
+        Tuple[TrainingState, envs.State, types.PRNGKey, int],
+    ],
+    Tuple[Tuple[TrainingState, envs.State, types.PRNGKey], Metrics],
+]
+
+ErrorFeedbackFactory: TypeAlias = Callable[
+    [
+        Callable[[Any], jax.Array],
+        optax.GradientTransformation,
+        envs.Env,
+        int,
+        int,
+        Callable[[Any], types.Policy],
+        int,
+        int,
+        int,
+        int,
+        bool,
+    ],
+    ErrorFeedback,
+]

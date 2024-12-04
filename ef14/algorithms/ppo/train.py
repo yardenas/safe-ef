@@ -37,6 +37,7 @@ from orbax import checkpoint as ocp
 from ef14.algorithms.penalizers import Penalizer
 from ef14.algorithms.ppo import (
     _PMAP_AXIS_NAME,
+    ErrorFeedbackFactory,
     Metrics,
     TrainingState,
 )
@@ -67,6 +68,7 @@ def train(
     environment: Union[envs_v1.Env, envs.Env],
     num_timesteps: int,
     episode_length: int,
+    error_feedback_factory: ErrorFeedbackFactory = centralized.update_fn,
     wrap_env: bool = True,
     action_repeat: int = 1,
     num_envs: int = 1,
@@ -105,7 +107,6 @@ def train(
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
     safe: bool = False,
-    privileged: bool = False,
 ):
     assert batch_size * num_minibatches % num_envs == 0
     if not safe:
@@ -211,7 +212,7 @@ def train(
         penalizer_params=penalizer_params,
         safety_budget=safety_budget,
     )
-    training_step = centralized.update_fn(
+    training_step = error_feedback_factory(
         loss_fn,
         optimizer,
         env,
