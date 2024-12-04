@@ -1,5 +1,5 @@
 import functools
-from typing import Tuple
+from typing import Literal, Tuple, TypedDict
 
 import jax
 import jax.numpy as jnp
@@ -9,6 +9,11 @@ from brax.training.acme import running_statistics
 from brax.training.types import PRNGKey
 
 from ef14.algorithms.ppo import _PMAP_AXIS_NAME, Metrics, TrainingState
+
+
+class CompressionSpec(TypedDict):
+    method: Literal["top", "random"]
+    k: float
 
 
 def update_fn(
@@ -22,7 +27,9 @@ def update_fn(
     batch_size,
     num_envs,
     env_step_per_training_step,
-    safe=False,
+    safe,
+    worker_compression: CompressionSpec,
+    server_compression: CompressionSpec,
 ):
     gradient_update_fn = gradients.gradient_update_fn(
         loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True

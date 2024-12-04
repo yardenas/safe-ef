@@ -1,6 +1,6 @@
 defaults:
   - penalizer: crpo
-  - error_feedback: centralized
+  - error_feedback: ef14
 
 name: ppo
 max_devices_per_host: null

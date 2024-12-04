@@ -22,7 +22,7 @@ def update_fn(
     batch_size,
     num_envs,
     env_step_per_training_step,
-    safe=False,
+    safe,
 ):
     gradient_update_fn = gradients.gradient_update_fn(
         loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
