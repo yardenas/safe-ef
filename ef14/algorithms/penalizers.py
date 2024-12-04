@@ -10,7 +10,12 @@ Params = TypeVar("Params")
 
 class Penalizer(Protocol):
     def __call__(
-        self, actor_loss: jax.Array, constraint: jax.Array, params: Params, *, rest: Any
+        self,
+        actor_loss: jax.Array,
+        constraint: jax.Array,
+        params: Params,
+        *,
+        rest: Any = None,
     ) -> tuple[jax.Array, dict[str, Any], Params]:
         ...
 
