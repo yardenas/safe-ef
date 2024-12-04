@@ -164,7 +164,7 @@ def train(
     local_key, key_env, eval_key = jax.random.split(local_key, 3)
     # key_networks should be global, so that networks are initialized the same
     # way for different processes.
-    key_policy, key_value, key_cost_value = jax.random.split(global_key, 3)
+    key_policy, key_value = jax.random.split(global_key, 2)
     del global_key
 
     assert num_envs % device_count == 0
@@ -376,7 +376,7 @@ def train(
     init_params = ppo_losses.SafePPONetworkParams(
         policy=ppo_network.policy_network.init(key_policy),
         value=ppo_network.value_network.init(key_value),
-        cost_value=ppo_network.cost_value_network.init(key_cost_value),
+        cost_value=ppo_network.cost_value_network.init(key_value),
     )  # type: ignore
 
     training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
