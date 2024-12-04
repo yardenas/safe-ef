@@ -19,16 +19,15 @@ See: https://arxiv.org/pdf/1707.06347.pdf
 
 import functools
 import time
-from typing import Callable, Optional, Tuple, TypeAlias, Union
+from typing import Callable, Optional, Tuple, Union
 
-import flax
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 from absl import logging
 from brax import base, envs
-from brax.training import acting, gradients, pmap, types
+from brax.training import pmap, types
 from brax.training.acme import running_statistics, specs
 from brax.training.types import Params, PRNGKey
 from brax.v1 import envs as envs_v1
@@ -36,24 +35,18 @@ from etils import epath
 from orbax import checkpoint as ocp
 
 from ef14.algorithms.penalizers import Penalizer
-from ef14.algorithms.ppo import losses as ppo_losses
+from ef14.algorithms.ppo import (
+    _PMAP_AXIS_NAME,
+    Metrics,
+    TrainingState,
+)
+from ef14.algorithms.ppo import (
+    losses as ppo_losses,
+)
 from ef14.algorithms.ppo import networks as ppo_networks
+from ef14.algorithms.ppo.error_feedback import centralized
 from ef14.benchmark_suites.wrappers import TrackOnlineCosts
 from ef14.rl.evaluation import ConstraintsEvaluator
-
-InferenceParams: TypeAlias = Tuple[running_statistics.NestedMeanStd, Params]
-Metrics: TypeAlias = types.Metrics
-
-
-@flax.struct.dataclass
-class TrainingState:
-    """Contains training state for the learner."""
-
-    optimizer_state: optax.OptState
-    params: ppo_losses.SafePPONetworkParams
-    normalizer_params: running_statistics.RunningStatisticsState
-    penalizer_params: Params
-    env_steps: jnp.ndarray
 
 
 def _unpmap(v):
@@ -218,112 +211,19 @@ def train(
         penalizer_params=penalizer_params,
         safety_budget=safety_budget,
     )
-
-    gradient_update_fn = gradients.gradient_update_fn(
-        loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
+    training_step = centralized.update_fn(
+        loss_fn,
+        optimizer,
+        env,
+        unroll_length,
+        num_minibatches,
+        make_policy,
+        num_updates_per_batch,
+        batch_size,
+        num_envs,
+        env_step_per_training_step,
+        safe,
     )
-
-    def minibatch_step(
-        carry,
-        data: types.Transition,
-        normalizer_params: running_statistics.RunningStatisticsState,
-    ):
-        optimizer_state, params, key = carry
-        key, key_loss = jax.random.split(key)
-        (_, aux), params, optimizer_state = gradient_update_fn(
-            params, normalizer_params, data, key_loss, optimizer_state=optimizer_state
-        )
-
-        return (optimizer_state, params, key), aux
-
-    def sgd_step(
-        carry,
-        unused_t,
-        data: types.Transition,
-        normalizer_params: running_statistics.RunningStatisticsState,
-    ):
-        optimizer_state, params, key = carry
-        key, key_perm, key_grad = jax.random.split(key, 3)
-
-        def convert_data(x: jnp.ndarray):
-            x = jax.random.permutation(key_perm, x)
-            x = jnp.reshape(x, (num_minibatches, -1) + x.shape[1:])
-            return x
-
-        shuffled_data = jax.tree_util.tree_map(convert_data, data)
-        (optimizer_state, params, _), aux = jax.lax.scan(
-            functools.partial(minibatch_step, normalizer_params=normalizer_params),
-            (optimizer_state, params, key_grad),
-            shuffled_data,
-            length=num_minibatches,
-        )
-        return (optimizer_state, params, key), aux
-
-    def training_step(
-        carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t
-    ) -> Tuple[Tuple[TrainingState, envs.State, PRNGKey], Metrics]:
-        training_state, state, key = carry
-        key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
-
-        policy = make_policy(
-            (
-                training_state.normalizer_params,
-                training_state.params.policy,
-                training_state.params.value,
-            )
-        )
-        extra_fields = ("truncation",)
-        if safe:
-            extra_fields += ("cost", "cumulative_cost")  # type: ignore
-
-        def f(carry, unused_t):
-            current_state, current_key = carry
-            current_key, next_key = jax.random.split(current_key)
-            next_state, data = acting.generate_unroll(
-                env,
-                current_state,
-                policy,
-                current_key,
-                unroll_length,
-                extra_fields=extra_fields,
-            )
-            return (next_state, next_key), data
-
-        (state, _), data = jax.lax.scan(
-            f,
-            (state, key_generate_unroll),
-            (),
-            length=batch_size * num_minibatches // num_envs,
-        )
-        # Have leading dimensions (batch_size * num_minibatches, unroll_length)
-        data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
-        data = jax.tree_util.tree_map(
-            lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), data
-        )
-        assert data.discount.shape[1:] == (unroll_length,)
-
-        # Update normalization params and normalize observations.
-        normalizer_params = running_statistics.update(
-            training_state.normalizer_params,
-            data.observation,
-            pmap_axis_name=_PMAP_AXIS_NAME,
-        )
-
-        (optimizer_state, params, _), aux = jax.lax.scan(
-            functools.partial(sgd_step, data=data, normalizer_params=normalizer_params),
-            (training_state.optimizer_state, training_state.params, key_sgd),
-            (),
-            length=num_updates_per_batch,
-        )
-
-        new_training_state = TrainingState(
-            optimizer_state=optimizer_state,
-            params=params,
-            normalizer_params=normalizer_params,
-            penalizer_params=aux.pop("penalizer_params", None),
-            env_steps=training_state.env_steps + env_step_per_training_step,
-        )  # type: ignore
-        return (new_training_state, state, new_key), aux
 
     def training_epoch(
         training_state: TrainingState, state: envs.State, key: PRNGKey

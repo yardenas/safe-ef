@@ -8,10 +8,22 @@ from brax.training import acting, gradients, types
 from brax.training.acme import running_statistics
 from brax.training.types import PRNGKey
 
-from ef14.algorithms.ppo import _PMAP_AXIS_NAME
+from ef14.algorithms.ppo import _PMAP_AXIS_NAME, Metrics, TrainingState
 
 
-def update_fn(loss_fn, optimizer, env, unroll_length, num_minibatches, safe=False):
+def update_fn(
+    loss_fn,
+    optimizer,
+    env,
+    unroll_length,
+    num_minibatches,
+    make_policy,
+    num_updates_per_batch,
+    batch_size,
+    num_envs,
+    env_step_per_training_step,
+    safe=False,
+):
     gradient_update_fn = gradients.gradient_update_fn(
         loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
     )
@@ -117,3 +129,5 @@ def update_fn(loss_fn, optimizer, env, unroll_length, num_minibatches, safe=Fals
             env_steps=training_state.env_steps + env_step_per_training_step,
         )  # type: ignore
         return (new_training_state, state, new_key), aux
+
+    return training_step
