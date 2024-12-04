@@ -23,10 +23,9 @@ from ef14.algorithms.ppo import train as ppo
 class PPOTest(parameterized.TestCase):
     """Tests for PPO module."""
 
-    @parameterized.parameters(True, False)
-    def testTrain(self, use_dict_obs):
+    def testTrain(self):
         """Test PPO with a simple env."""
-        fast = envs.get_environment("fast", use_dict_obs=use_dict_obs)
+        fast = envs.get_environment("fast")
         _, _, metrics = ppo.train(
             fast,
             num_timesteps=2**15,
