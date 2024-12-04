@@ -74,13 +74,13 @@ files = [
 
 [[package]]
 name = "brax"
-version = "0.10.5"
+version = "0.11.0"
 description = "A differentiable physics engine written in JAX."
 optional = false
 python-versions = "*"
 files = [
-    {file = "brax-0.10.5-py3-none-any.whl", hash = "sha256:304fe6e5e266e42a18f197f2b7b6a9bb03a87bd97928e385c51c874b56f95866"},
-    {file = "brax-0.10.5.tar.gz", hash = "sha256:e7563130c2b08bf0c9453d87602126732f20afc4624cb8574b3577fa62fdbcec"},
+    {file = "brax-0.11.0-py3-none-any.whl", hash = "sha256:46e10afb9185d77c0f5180cb098beeb67339b9bb8a35bdf5556f76ba3875abcf"},
+    {file = "brax-0.11.0.tar.gz", hash = "sha256:7efae65345d8a4700bf24af607bf021df488ef1bc008f0579c9118c7e9e54dc1"},
 ]
 
 [package.dependencies]
@@ -4139,4 +4139,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10,<3.12"
-content-hash = "211c08d22dbdb8736ccd37a57b653de7826dedf8bec34859803fddbb90386bcf"
+content-hash = "d23a21f04981153146312a28f473071dcc5dcda2f2646c5e4a0800c7b9ed7632"
