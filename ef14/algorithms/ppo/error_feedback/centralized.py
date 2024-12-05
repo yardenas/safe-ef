@@ -84,14 +84,16 @@ def update_fn(
         def f(carry, unused_t):
             current_state, current_key = carry
             current_key, next_key = jax.random.split(current_key)
-            next_state, data = acting.generate_unroll(
+            generate_unroll = lambda state: acting.generate_unroll(
                 env,
-                current_state,
+                state,
                 policy,
                 current_key,
                 unroll_length,
                 extra_fields=extra_fields,
             )
+            generate_unroll = jax.vmap(generate_unroll)
+            next_state, data = generate_unroll(current_state)
             return (next_state, next_key), data
 
         (state, _), data = jax.lax.scan(
@@ -100,6 +102,8 @@ def update_fn(
             (),
             length=batch_size * num_minibatches // num_envs,
         )
+        assert data.observation.shape[1] == 1
+        data = jax.tree_util.tree_map(lambda x: x.squeeze(1), data)
         # Have leading dimensions (batch_size * num_minibatches, unroll_length)
         data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
         data = jax.tree_util.tree_map(

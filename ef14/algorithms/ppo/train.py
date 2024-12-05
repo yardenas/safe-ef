@@ -383,10 +383,15 @@ def train(
                 training_state, env_state, epoch_keys
             )
             current_step = int(_unpmap(training_state.env_steps))
-
-            key_envs = jax.vmap(
-                lambda x, s: jax.random.split(x[0], s), in_axes=(0, None)
-            )(key_envs, key_envs.shape[1])
+            key_env, tmp_key = jax.random.split(key_env)
+            key_envs = jax.random.split(
+                tmp_key, num_trajectories_per_env * num_envs // process_count
+            )
+            key_envs = jnp.reshape(
+                key_envs,
+                (local_devices_to_use, num_trajectories_per_env, -1)
+                + key_envs.shape[1:],
+            )
             # TODO: move extra reset logic to the AutoResetWrapper.
             env_state = reset_fn(key_envs) if num_resets_per_eval > 0 else env_state
 
