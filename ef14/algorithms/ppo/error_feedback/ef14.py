@@ -48,13 +48,9 @@ def update_fn(
 
         return (optimizer_state, params, key), aux
 
-    def sgd_step(
-        carry,
-        unused_t,
-        data: types.Transition,
-        normalizer_params: running_statistics.RunningStatisticsState,
+    def worker_step(
+        data: types.Transition, optimizer_state, params, key, normalizer_params
     ):
-        optimizer_state, params, key = carry
         key, key_perm, key_grad = jax.random.split(key, 3)
 
         def convert_data(x: jnp.ndarray):
@@ -69,6 +65,19 @@ def update_fn(
             shuffled_data,
             length=num_minibatches,
         )
+        return (optimizer_state, params, key), aux
+
+    def sgd_step(
+        carry,
+        unused_t,
+        data: types.Transition,
+        normalizer_params: running_statistics.RunningStatisticsState,
+    ):
+        optimizer_state, params, key = carry
+        step = lambda data: worker_step(
+            data, optimizer_state, params, key, normalizer_params
+        )
+        (optimizer_state, params, key), aux = jax.vmap(step)(data)
         return (optimizer_state, params, key), aux
 
     def training_step(
@@ -91,14 +100,16 @@ def update_fn(
         def f(carry, unused_t):
             current_state, current_key = carry
             current_key, next_key = jax.random.split(current_key)
-            next_state, data = acting.generate_unroll(
+            generate_unroll = lambda state: acting.generate_unroll(
                 env,
-                current_state,
+                state,
                 policy,
                 current_key,
                 unroll_length,
                 extra_fields=extra_fields,
             )
+            generate_unroll = jax.vmap(generate_unroll)
+            next_state, data = generate_unroll(current_state)
             return (next_state, next_key), data
 
         (state, _), data = jax.lax.scan(
@@ -107,12 +118,10 @@ def update_fn(
             (),
             length=batch_size * num_minibatches // num_envs,
         )
-        # Have leading dimensions (batch_size * num_minibatches, unroll_length)
         data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
         data = jax.tree_util.tree_map(
-            lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), data
+            lambda x: jnp.reshape(x, (x.shape[3], -1, x.shape[1]) + x.shape[4:]), data
         )
-        assert data.discount.shape[1:] == (unroll_length,)
 
         # Update normalization params and normalize observations.
         normalizer_params = running_statistics.update(

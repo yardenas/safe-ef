@@ -72,6 +72,7 @@ def train(
     wrap_env: bool = True,
     action_repeat: int = 1,
     num_envs: int = 1,
+    num_trajectories_per_env: int = 1,
     max_devices_per_host: Optional[int] = None,
     num_eval_envs: int = 128,
     learning_rate: float = 1e-4,
@@ -134,7 +135,11 @@ def train(
     device_count = local_devices_to_use * process_count
     # The number of environment steps executed for every training step.
     env_step_per_training_step = (
-        batch_size * unroll_length * num_minibatches * action_repeat
+        batch_size
+        * unroll_length
+        * num_minibatches
+        * action_repeat
+        * num_trajectories_per_env
     )
     num_evals_after_init = max(num_evals - 1, 1)
     # The number of training_step calls per training_epoch call.
@@ -183,9 +188,14 @@ def train(
         )
 
     env = TrackOnlineCosts(env)
-    reset_fn = jax.jit(jax.vmap(env.reset))
-    key_envs = jax.random.split(key_env, num_envs // process_count)
-    key_envs = jnp.reshape(key_envs, (local_devices_to_use, -1) + key_envs.shape[1:])
+    reset_fn = jax.jit(jax.vmap(jax.vmap(env.reset)))
+    key_envs = jax.random.split(
+        key_env, num_trajectories_per_env * num_envs // process_count
+    )
+    key_envs = jnp.reshape(
+        key_envs,
+        (local_devices_to_use, num_trajectories_per_env, -1) + key_envs.shape[1:],
+    )
     env_state = reset_fn(key_envs)
 
     normalize = lambda x, y: x
