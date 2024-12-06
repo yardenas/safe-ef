@@ -23,6 +23,7 @@ class TrainingState:
     normalizer_params: running_statistics.RunningStatisticsState
     penalizer_params: Params
     env_steps: jnp.ndarray
+    error_feedback_state: Params
 
 
 InferenceParams: TypeAlias = Tuple[running_statistics.NestedMeanStd, Params]

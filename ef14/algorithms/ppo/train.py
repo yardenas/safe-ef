@@ -222,7 +222,7 @@ def train(
         penalizer_params=penalizer_params,
         safety_budget=safety_budget,
     )
-    training_step = error_feedback_factory(
+    training_step, error_feedback_init = error_feedback_factory(
         loss_fn,
         optimizer,
         env,
@@ -298,6 +298,7 @@ def train(
         ),
         env_steps=0,
         penalizer_params=penalizer_params,
+        error_feedback_state=error_feedback_init(init_params),
     )  # type: ignore
 
     if (

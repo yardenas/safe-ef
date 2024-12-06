@@ -1,5 +1,5 @@
 import functools
-from typing import Literal, Tuple, TypedDict
+from typing import Literal, NamedTuple, Tuple, TypedDict
 
 import jax
 import jax.numpy as jnp
@@ -16,6 +16,10 @@ class CompressionSpec(TypedDict):
     k: float
 
 
+class State(NamedTuple):
+    e: jax.Array
+
+
 def update_fn(
     loss_fn,
     optimizer,
@@ -28,6 +32,8 @@ def update_fn(
     num_envs,
     env_step_per_training_step,
     safe,
+    *,
+    num_trajectories_per_env,
     worker_compression: CompressionSpec,
     server_compression: CompressionSpec,
 ):
@@ -116,7 +122,7 @@ def update_fn(
             f,
             (state, key_generate_unroll),
             (),
-            length=batch_size * num_minibatches // num_envs,
+            length=batch_size * num_minibatches // num_trajectories_per_env,
         )
         data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
         data = jax.tree_util.tree_map(
@@ -146,4 +152,7 @@ def update_fn(
         )  # type: ignore
         return (new_training_state, state, new_key), aux
 
-    return training_step
+    def init(ppo_params):
+        return jax.tree.map(lambda x: jnp.zeros_like(x), ppo_params)
+
+    return training_step, init

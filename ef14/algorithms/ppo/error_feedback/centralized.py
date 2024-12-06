@@ -134,4 +134,4 @@ def update_fn(
         )  # type: ignore
         return (new_training_state, state, new_key), aux
 
-    return training_step
+    return training_step, lambda _: None
