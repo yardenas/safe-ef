@@ -2,11 +2,12 @@ import functools
 from typing import Literal, NamedTuple, Tuple, TypedDict
 
 import jax
+import jax.flatten_util
 import jax.numpy as jnp
 from brax import envs
 from brax.training import acting, gradients, types
 from brax.training.acme import running_statistics
-from brax.training.types import PRNGKey
+from brax.training.types import Params, PRNGKey
 
 from ef14.algorithms.ppo import _PMAP_AXIS_NAME, Metrics, TrainingState
 
@@ -18,6 +19,24 @@ class CompressionSpec(TypedDict):
 
 class State(NamedTuple):
     e: jax.Array
+
+
+def compress(
+    copmression_spec: CompressionSpec, rng: jax.Array, params: Params
+) -> Params:
+    flat_params, pytree_def = jax.flatten_util.ravel_pytree(params)
+    k = int(copmression_spec["k"] * len(flat_params))
+    if copmression_spec["method"] == "top":
+        magnitudes = jnp.linalg.norm(flat_params)
+        values, ids = jax.lax.top_k(magnitudes, k)
+    elif copmression_spec["method"] == "random":
+        ids = jax.random.choice(rng, flat_params.shape[0], shape=(k,), replace=False)
+        values = flat_params[ids]
+    else:
+        raise NotImplementedError("Compression method not implemented")
+    outs = jnp.zeros_like(values)
+    outs = outs.at[ids].set(values)
+    return pytree_def(outs)
 
 
 def update_fn(
@@ -57,7 +76,7 @@ def update_fn(
     def worker_step(
         data: types.Transition, optimizer_state, params, key, normalizer_params
     ):
-        key, key_perm, key_grad = jax.random.split(key, 3)
+        key, key_perm, key_grad, key_compress = jax.random.split(key, 4)
 
         def convert_data(x: jnp.ndarray):
             x = jax.random.permutation(key_perm, x)
@@ -71,7 +90,8 @@ def update_fn(
             shuffled_data,
             length=num_minibatches,
         )
-        return (optimizer_state, params, key), aux
+        out_params = compress(worker_compression, key_compress, params)
+        return (optimizer_state, out_params, key), aux
 
     def sgd_step(
         carry,
