@@ -24,7 +24,6 @@ class State(NamedTuple):
 def compress(
     copmression_spec: CompressionSpec, rng: jax.Array, params: Params
 ) -> Params:
-    flat_params, pytree_def = jax.flatten_util.ravel_pytree(params)
     k = int(copmression_spec["k"] * len(flat_params))
     if copmression_spec["method"] == "top":
         magnitudes = jnp.linalg.norm(flat_params)
@@ -60,23 +59,46 @@ def update_fn(
         loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
     )
 
+    def worker_step(
+        data: types.Transition,
+        optimizer_state,
+        params,
+        e_i_k,
+        key,
+        normalizer_params,
+    ):
+        key, key_loss, key_compress = jax.random.split(key, 3)
+        # TODO (yarden): this should not update, but only compute the gradients
+        (_, aux), params, optimizer_state = gradient_update_fn(
+            params, normalizer_params, data, key_loss, optimizer_state=optimizer_state
+        )
+        x_i_k, pytree_def = jax.flatten_util.ravel_pytree(params)
+        # FIXME (yarden): not to compute h_i_k
+        h_i_k = jnp.zeros_like(x_i_k)
+        v_i_k = compress(worker_compression, key_compress, x_i_k + h_i_k)
+        e_i_k = e_i_k + h_i_k - v_i_k
+        return (optimizer_state, params, e_i_k, key), aux
+
     def minibatch_step(
         carry,
         data: types.Transition,
         normalizer_params: running_statistics.RunningStatisticsState,
     ):
-        optimizer_state, params, key = carry
-        key, key_loss = jax.random.split(key)
-        (_, aux), params, optimizer_state = gradient_update_fn(
-            params, normalizer_params, data, key_loss, optimizer_state=optimizer_state
+        optimizer_state, params, e_k, key = carry
+        step = lambda data, e_k: worker_step(
+            data, optimizer_state, params, e_k, key, normalizer_params
         )
+        (optimizer_state, params, key), aux = jax.vmap(step)(data, e_k)
+        return (optimizer_state, params, e_k, key), aux
 
-        return (optimizer_state, params, key), aux
-
-    def worker_step(
-        data: types.Transition, optimizer_state, params, key, normalizer_params
+    def sgd_step(
+        carry,
+        unused_t,
+        data: types.Transition,
+        normalizer_params: running_statistics.RunningStatisticsState,
     ):
-        key, key_perm, key_grad, key_compress = jax.random.split(key, 4)
+        optimizer_state, params, e_k, key = carry
+        key, key_perm, key_grad = jax.random.split(key, 3)
 
         def convert_data(x: jnp.ndarray):
             x = jax.random.permutation(key_perm, x)
@@ -86,25 +108,11 @@ def update_fn(
         shuffled_data = jax.tree_util.tree_map(convert_data, data)
         (optimizer_state, params, _), aux = jax.lax.scan(
             functools.partial(minibatch_step, normalizer_params=normalizer_params),
-            (optimizer_state, params, key_grad),
+            (optimizer_state, params, e_k, key_grad),
             shuffled_data,
             length=num_minibatches,
         )
-        out_params = compress(worker_compression, key_compress, params)
-        return (optimizer_state, out_params, key), aux
-
-    def sgd_step(
-        carry,
-        unused_t,
-        data: types.Transition,
-        normalizer_params: running_statistics.RunningStatisticsState,
-    ):
-        optimizer_state, params, key = carry
-        step = lambda data: worker_step(
-            data, optimizer_state, params, key, normalizer_params
-        )
-        (optimizer_state, params, key), aux = jax.vmap(step)(data)
-        return (optimizer_state, params, key), aux
+        return (optimizer_state, params, e_k, key), aux
 
     def training_step(
         carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t
@@ -156,9 +164,14 @@ def update_fn(
             pmap_axis_name=_PMAP_AXIS_NAME,
         )
 
-        (optimizer_state, params, _), aux = jax.lax.scan(
+        (optimizer_state, params, error_feedback_state, _), aux = jax.lax.scan(
             functools.partial(sgd_step, data=data, normalizer_params=normalizer_params),
-            (training_state.optimizer_state, training_state.params, key_sgd),
+            (
+                training_state.optimizer_state,
+                training_state.params,
+                training_state.error_feedback_state,
+                key_sgd,
+            ),
             (),
             length=num_updates_per_batch,
         )
@@ -169,6 +182,7 @@ def update_fn(
             normalizer_params=normalizer_params,
             penalizer_params=aux.pop("penalizer_params", None),
             env_steps=training_state.env_steps + env_step_per_training_step,
+            error_feedback_state=error_feedback_state,
         )  # type: ignore
         return (new_training_state, state, new_key), aux
 
