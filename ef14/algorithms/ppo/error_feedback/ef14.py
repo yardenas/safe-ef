@@ -4,6 +4,7 @@ from typing import Literal, NamedTuple, Tuple, TypedDict
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
+import optax
 from brax import envs
 from brax.training import acting, gradients, types
 from brax.training.acme import running_statistics
@@ -18,24 +19,25 @@ class CompressionSpec(TypedDict):
 
 
 class State(NamedTuple):
-    e: jax.Array
+    e_k: jax.Array
+    w_k: jax.Array
 
 
 def compress(
     copmression_spec: CompressionSpec, rng: jax.Array, params: Params
 ) -> Params:
-    k = int(copmression_spec["k"] * len(flat_params))
+    k = int(copmression_spec["k"] * len(params))
     if copmression_spec["method"] == "top":
-        magnitudes = jnp.linalg.norm(flat_params)
+        magnitudes = jnp.linalg.norm(params)
         values, ids = jax.lax.top_k(magnitudes, k)
     elif copmression_spec["method"] == "random":
-        ids = jax.random.choice(rng, flat_params.shape[0], shape=(k,), replace=False)
-        values = flat_params[ids]
+        ids = jax.random.choice(rng, params.shape[0], shape=(k,), replace=False)
+        values = params[ids]
     else:
         raise NotImplementedError("Compression method not implemented")
     outs = jnp.zeros_like(values)
     outs = outs.at[ids].set(values)
-    return pytree_def(outs)
+    return outs
 
 
 def update_fn(
@@ -55,40 +57,43 @@ def update_fn(
     worker_compression: CompressionSpec,
     server_compression: CompressionSpec,
 ):
-    gradient_update_fn = gradients.gradient_update_fn(
-        loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
-    )
-
     def worker_step(
         data: types.Transition,
-        optimizer_state,
         params,
         e_i_k,
         key,
         normalizer_params,
     ):
         key, key_loss, key_compress = jax.random.split(key, 3)
-        # TODO (yarden): this should not update, but only compute the gradients
-        (_, aux), params, optimizer_state = gradient_update_fn(
-            params, normalizer_params, data, key_loss, optimizer_state=optimizer_state
+        loss_and_pgrad_fn = gradients.loss_and_pgrad(
+            loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
         )
+        (_, aux), h_i_k = loss_and_pgrad_fn(params, normalizer_params, data, key_loss)
         x_i_k, pytree_def = jax.flatten_util.ravel_pytree(params)
-        # FIXME (yarden): not to compute h_i_k
-        h_i_k = jnp.zeros_like(x_i_k)
+        h_i_k, _ = jax.flatten_util.ravel_pytree(h_i_k)
         v_i_k = compress(worker_compression, key_compress, x_i_k + h_i_k)
+        v_i_k = pytree_def(v_i_k)
         e_i_k = e_i_k + h_i_k - v_i_k
-        return (optimizer_state, params, e_i_k, key), aux
+        return (v_i_k, e_i_k), aux
 
     def minibatch_step(
         carry,
         data: types.Transition,
         normalizer_params: running_statistics.RunningStatisticsState,
     ):
-        optimizer_state, params, e_k, key = carry
-        step = lambda data, e_k: worker_step(
-            data, optimizer_state, params, e_k, key, normalizer_params
-        )
-        (optimizer_state, params, key), aux = jax.vmap(step)(data, e_k)
+        optimizer_state, params, ef14_state, key = carry
+        e_k, w_k = ef14_state
+        key, compress_key = jax.random.split(key)
+        step = lambda data, e_k: worker_step(data, params, e_k, key, normalizer_params)
+        (v_k, e_k), aux = jax.vmap(step)(data, e_k)
+        v_k = jax.tree.map(lambda x: x.mean(0), v_k)
+        w_k_updates, optimizer_state = optimizer.update(v_k, optimizer_state)
+        w_k = optax.apply_updates(w_k, w_k_updates)
+        delta = jax.tree.map(lambda w, x: w - x, w_k, params)
+        delta, pytree_def = jax.flatten_util.ravel_pytree(delta)
+        tmp_server_compress = compress(server_compression, compress_key, delta)
+        delta = pytree_def(delta)
+        params = jax.tree.map(lambda x, d: x + d, params, tmp_server_compress)
         return (optimizer_state, params, e_k, key), aux
 
     def sgd_step(
@@ -97,7 +102,7 @@ def update_fn(
         data: types.Transition,
         normalizer_params: running_statistics.RunningStatisticsState,
     ):
-        optimizer_state, params, e_k, key = carry
+        optimizer_state, params, ef14_state, key = carry
         key, key_perm, key_grad = jax.random.split(key, 3)
 
         def convert_data(x: jnp.ndarray):
@@ -108,11 +113,11 @@ def update_fn(
         shuffled_data = jax.tree_util.tree_map(convert_data, data)
         (optimizer_state, params, _), aux = jax.lax.scan(
             functools.partial(minibatch_step, normalizer_params=normalizer_params),
-            (optimizer_state, params, e_k, key_grad),
+            (optimizer_state, params, ef14_state, key_grad),
             shuffled_data,
             length=num_minibatches,
         )
-        return (optimizer_state, params, e_k, key), aux
+        return (optimizer_state, params, ef14_state, key), aux
 
     def training_step(
         carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t
@@ -187,6 +192,6 @@ def update_fn(
         return (new_training_state, state, new_key), aux
 
     def init(ppo_params):
-        return jax.tree.map(lambda x: jnp.zeros_like(x), ppo_params)
+        return State(jax.tree.map(lambda x: jnp.zeros_like(x), ppo_params), ppo_params)
 
     return training_step, init
