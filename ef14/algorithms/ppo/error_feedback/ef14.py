@@ -107,7 +107,8 @@ def update_fn(
 
         def convert_data(x: jnp.ndarray):
             x = jax.random.permutation(key_perm, x)
-            x = jnp.reshape(x, (num_minibatches, -1) + x.shape[1:])
+            x = jnp.reshape(x, (num_envs, num_minibatches, -1) + x.shape[2:])
+            x = jnp.swapaxes(x, 0, 1)
             return x
 
         shuffled_data = jax.tree_util.tree_map(convert_data, data)
@@ -124,7 +125,6 @@ def update_fn(
     ) -> Tuple[Tuple[TrainingState, envs.State, PRNGKey], Metrics]:
         training_state, state, key = carry
         key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
-
         policy = make_policy(
             (
                 training_state.normalizer_params,
