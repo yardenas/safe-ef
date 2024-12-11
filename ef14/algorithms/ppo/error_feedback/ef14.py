@@ -24,19 +24,18 @@ class State(NamedTuple):
 
 
 def compress(
-    compression_spec: CompressionSpec, rng: jax.Array, params: Params
+    compression_spec: CompressionSpec, rng: jax.Array, params: jax.Array
 ) -> Params:
     k = int(compression_spec["k"] * len(params))
     if compression_spec["method"] == "top":
-        # FIXME (yarden): magnitude per param, not the magnitude of the vector
-        magnitudes = jnp.linalg.norm(params)
-        values, ids = jax.lax.top_k(magnitudes, k)
+        _, ids = jax.lax.top_k(params**2, k)
     elif compression_spec["method"] == "random":
         ids = jax.random.choice(rng, params.shape[0], shape=(k,), replace=False)
-        values = params[ids]
     else:
         raise NotImplementedError("Compression method not implemented")
-    outs = jnp.zeros_like(values)
+    # TODO (yarden): figure out if using zeros this way really makes sense?
+    values = params[ids]
+    outs = jnp.zeros_like(params)
     outs = outs.at[ids].set(values)
     return outs
 
@@ -73,8 +72,10 @@ def update_fn(
         x_i_k, pytree_def = jax.flatten_util.ravel_pytree(params)
         h_i_k, _ = jax.flatten_util.ravel_pytree(h_i_k)
         v_i_k = compress(worker_compression, key_compress, x_i_k + h_i_k)
-        v_i_k = pytree_def(v_i_k)
+        e_i_k = jax.flatten_util.ravel_pytree(e_i_k)[0]
         e_i_k = e_i_k + h_i_k - v_i_k
+        v_i_k = pytree_def(v_i_k)
+        e_i_k = pytree_def(e_i_k)
         return (v_i_k, e_i_k), aux
 
     def minibatch_step(
@@ -93,8 +94,9 @@ def update_fn(
         delta = jax.tree.map(lambda w, x: w - x, w_k, params)
         delta, pytree_def = jax.flatten_util.ravel_pytree(delta)
         tmp_server_compress = compress(server_compression, compress_key, delta)
-        delta = pytree_def(delta)
-        params = jax.tree.map(lambda x, d: x + d, params, tmp_server_compress)
+        params = jax.tree.map(
+            lambda x, d: x + d, params, pytree_def(tmp_server_compress)
+        )
         return (optimizer_state, params, State(e_k, w_k), key), aux
 
     def sgd_step(
@@ -192,9 +194,9 @@ def update_fn(
         )  # type: ignore
         return (new_training_state, state, new_key), aux
 
-    def init(dummy, ppo_params):
-        return State(jax.tree.map(lambda x: jnp.zeros_like(x), ppo_params), ppo_params)
+    def init(ppo_params):
+        make_e_k = lambda dummy: jax.tree.map(lambda x: jnp.zeros_like(x), ppo_params)
+        make_e_k = jax.vmap(make_e_k)
+        return State(make_e_k(jnp.asarray(range(num_envs))), ppo_params)
 
-    init = jax.vmap(init, in_axes=(0, None))
-    init = functools.partial(init, jnp.asarray(range(num_envs)))
     return training_step, init
