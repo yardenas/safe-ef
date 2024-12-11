@@ -29,7 +29,7 @@ class TrainingState:
 InferenceParams: TypeAlias = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics: TypeAlias = types.Metrics
 
-ErrorFeedbackInit: TypeAlias = Callable[[Params], Params]
+ErrorFeedbackInit: TypeAlias = Callable[[Params], Any]
 
 ErrorFeedback: TypeAlias = Callable[
     [
