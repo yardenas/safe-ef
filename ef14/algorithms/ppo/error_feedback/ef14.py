@@ -24,13 +24,14 @@ class State(NamedTuple):
 
 
 def compress(
-    copmression_spec: CompressionSpec, rng: jax.Array, params: Params
+    compression_spec: CompressionSpec, rng: jax.Array, params: Params
 ) -> Params:
-    k = int(copmression_spec["k"] * len(params))
-    if copmression_spec["method"] == "top":
+    k = int(compression_spec["k"] * len(params))
+    if compression_spec["method"] == "top":
+        # FIXME (yarden): magnitude per param, not the magnitude of the vector
         magnitudes = jnp.linalg.norm(params)
         values, ids = jax.lax.top_k(magnitudes, k)
-    elif copmression_spec["method"] == "random":
+    elif compression_spec["method"] == "random":
         ids = jax.random.choice(rng, params.shape[0], shape=(k,), replace=False)
         values = params[ids]
     else:
@@ -94,7 +95,7 @@ def update_fn(
         tmp_server_compress = compress(server_compression, compress_key, delta)
         delta = pytree_def(delta)
         params = jax.tree.map(lambda x, d: x + d, params, tmp_server_compress)
-        return (optimizer_state, params, e_k, key), aux
+        return (optimizer_state, params, State(e_k, w_k), key), aux
 
     def sgd_step(
         carry,
@@ -112,7 +113,7 @@ def update_fn(
             return x
 
         shuffled_data = jax.tree_util.tree_map(convert_data, data)
-        (optimizer_state, params, _), aux = jax.lax.scan(
+        (optimizer_state, params, ef14_state, _), aux = jax.lax.scan(
             functools.partial(minibatch_step, normalizer_params=normalizer_params),
             (optimizer_state, params, ef14_state, key_grad),
             shuffled_data,
@@ -191,7 +192,9 @@ def update_fn(
         )  # type: ignore
         return (new_training_state, state, new_key), aux
 
-    def init(ppo_params):
+    def init(dummy, ppo_params):
         return State(jax.tree.map(lambda x: jnp.zeros_like(x), ppo_params), ppo_params)
 
+    init = jax.vmap(init, in_axes=(0, None))
+    init = functools.partial(init, jnp.asarray(range(num_envs)))
     return training_step, init
