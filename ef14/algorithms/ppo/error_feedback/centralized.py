@@ -131,6 +131,7 @@ def update_fn(
             normalizer_params=normalizer_params,
             penalizer_params=aux.pop("penalizer_params", None),
             env_steps=training_state.env_steps + env_step_per_training_step,
+            error_feedback_state=aux.pop("error_feedback_state", None),
         )  # type: ignore
         return (new_training_state, state, new_key), aux
 
