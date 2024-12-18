@@ -26,6 +26,7 @@ class State(NamedTuple):
 def compress(
     compression_spec: CompressionSpec, rng: jax.Array, params: jax.Array
 ) -> Params:
+    return params
     k = int(compression_spec["k"] * len(params))
     if compression_spec["method"] == "top":
         _, ids = jax.lax.top_k(params**2, k)
@@ -92,25 +93,25 @@ def update_fn(
         e_k, w_k = ef14_state
         key, compress_key = jax.random.split(key)
         assert data.observation.shape[0] == 1
-        data = jax.tree.map(lambda x: x[0], data)
-        (_, aux), params, optimizer_state = gradient_update_fn(
-            params,
-            normalizer_params,
-            data,
-            compress_key,
-            optimizer_state=optimizer_state,
-        )
-        # step = lambda data, e_k: worker_step(data, params, e_k, key, normalizer_params)
-        # (v_k, e_k), aux = jax.vmap(step)(data, e_k)
-        # v_k = jax.tree.map(lambda x: x.mean(0), v_k)
-        # w_k_updates, optimizer_state = optimizer.update(v_k, optimizer_state)
-        # w_k = optax.apply_updates(w_k, w_k_updates)
-        # delta = jax.tree.map(lambda w, x: w - x, w_k, params)
-        # delta, pytree_def = jax.flatten_util.ravel_pytree(delta)
-        # tmp_server_compress = compress(server_compression, compress_key, delta)
-        # params = jax.tree.map(
-        #     lambda x, d: x + d, params, pytree_def(tmp_server_compress)
+        # data = jax.tree.map(lambda x: x[0], data)
+        # (_, aux), params, optimizer_state = gradient_update_fn(
+        #     params,
+        #     normalizer_params,
+        #     data,
+        #     compress_key,
+        #     optimizer_state=optimizer_state,
         # )
+        step = lambda data, e_k: worker_step(data, params, e_k, key, normalizer_params)
+        (v_k, e_k), aux = jax.vmap(step)(data, e_k)
+        v_k = jax.tree.map(lambda x: x.mean(0), v_k)
+        w_k_updates, optimizer_state = optimizer.update(v_k, optimizer_state)
+        w_k = optax.apply_updates(w_k, w_k_updates)
+        delta = jax.tree.map(lambda w, x: w - x, w_k, params)
+        delta, pytree_def = jax.flatten_util.ravel_pytree(delta)
+        tmp_server_compress = compress(server_compression, compress_key, delta)
+        params = jax.tree.map(
+            lambda x, d: x + d, params, pytree_def(tmp_server_compress)
+        )
         return (optimizer_state, params, State(e_k, w_k), key), aux
 
     def sgd_step(
