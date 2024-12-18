@@ -123,7 +123,7 @@ def update_fn(
         def convert_data(x: jnp.ndarray):
             x = jax.random.permutation(key_perm, x, axis=1)
             # FIXME (yarden): bad! this reshape is bad. Remove and use comment
-            x = jnp.reshape(x, (num_minibatches, -1) + x.shape[2:])
+            x = jnp.reshape(x, (num_minibatches, -1) + x.shape[1:])
             # x = jnp.reshape(x, (num_envs, num_minibatches, -1) + x.shape[2:])
             # x = jnp.swapaxes(x, 0, 1)
             return x
@@ -174,11 +174,14 @@ def update_fn(
             (),
             length=batch_size * num_minibatches // num_trajectories_per_env,
         )
-        data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
         data = jax.tree_util.tree_map(
-            lambda x: jnp.reshape(x, (x.shape[3], -1, x.shape[1]) + x.shape[4:]), data
+            lambda x: jnp.reshape(x, (-1, *x.shape[2:])), data
         )
-
+        data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
+        data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
+        data = jax.tree_util.tree_map(
+            lambda x: jnp.reshape(x, (-1, *x.shape[2:])), data
+        )
         # Update normalization params and normalize observations.
         normalizer_params = running_statistics.update(
             training_state.normalizer_params,
