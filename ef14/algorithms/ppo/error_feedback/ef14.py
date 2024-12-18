@@ -109,7 +109,7 @@ def update_fn(
         key, key_perm, key_grad = jax.random.split(key, 3)
 
         def convert_data(x: jnp.ndarray):
-            x = jax.random.permutation(key_perm, x)
+            x = jax.random.permutation(key_perm, x, axis=1)
             x = jnp.reshape(x, (num_envs, num_minibatches, -1) + x.shape[2:])
             x = jnp.swapaxes(x, 0, 1)
             return x
