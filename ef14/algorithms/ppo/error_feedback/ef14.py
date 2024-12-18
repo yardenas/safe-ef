@@ -91,6 +91,8 @@ def update_fn(
         optimizer_state, params, ef14_state, key = carry
         e_k, w_k = ef14_state
         key, compress_key = jax.random.split(key)
+        assert data.observation.shape[0] == 1
+        data = jax.tree.map(lambda x: x[0], data)
         (_, aux), params, optimizer_state = gradient_update_fn(
             params,
             normalizer_params,
@@ -121,12 +123,9 @@ def update_fn(
         key, key_perm, key_grad = jax.random.split(key, 3)
 
         def convert_data(x: jnp.ndarray):
-            # FIXME (yarden): permutation should be 1
-            x = jax.random.permutation(key_perm, x, axis=0)
-            # FIXME (yarden): bad! this reshape is bad. Remove and use comment
-            x = jnp.reshape(x, (num_minibatches, -1) + x.shape[1:])
-            # x = jnp.reshape(x, (num_envs, num_minibatches, -1) + x.shape[2:])
-            # x = jnp.swapaxes(x, 0, 1)
+            x = jax.random.permutation(key_perm, x, axis=1)
+            x = jnp.reshape(x, (num_envs, num_minibatches, -1) + x.shape[2:])
+            x = jnp.swapaxes(x, 0, 1)
             return x
 
         shuffled_data = jax.tree_util.tree_map(convert_data, data)
@@ -180,9 +179,6 @@ def update_fn(
         )
         data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
         data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
-        data = jax.tree_util.tree_map(
-            lambda x: jnp.reshape(x, (-1, *x.shape[2:])), data
-        )
         # Update normalization params and normalize observations.
         normalizer_params = running_statistics.update(
             training_state.normalizer_params,
