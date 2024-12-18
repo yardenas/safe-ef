@@ -57,6 +57,14 @@ def update_fn(
     worker_compression: CompressionSpec,
     server_compression: CompressionSpec,
 ):
+    loss_and_pgrad_fn = gradients.loss_and_pgrad(
+        loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
+    )
+    # TODO (yarden): remove this
+    gradient_update_fn = gradients.gradient_update_fn(
+        loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
+    )
+
     def worker_step(
         data: types.Transition,
         params,
@@ -65,9 +73,6 @@ def update_fn(
         normalizer_params,
     ):
         key, key_loss, key_compress = jax.random.split(key, 3)
-        loss_and_pgrad_fn = gradients.loss_and_pgrad(
-            loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
-        )
         (_, aux), h_i_k = loss_and_pgrad_fn(params, normalizer_params, data, key_loss)
         h_i_k, pytree_def = jax.flatten_util.ravel_pytree(h_i_k)
         e_i_k = jax.flatten_util.ravel_pytree(e_i_k)[0]
@@ -86,17 +91,24 @@ def update_fn(
         optimizer_state, params, ef14_state, key = carry
         e_k, w_k = ef14_state
         key, compress_key = jax.random.split(key)
-        step = lambda data, e_k: worker_step(data, params, e_k, key, normalizer_params)
-        (v_k, e_k), aux = jax.vmap(step)(data, e_k)
-        v_k = jax.tree.map(lambda x: x.mean(0), v_k)
-        w_k_updates, optimizer_state = optimizer.update(v_k, optimizer_state)
-        w_k = optax.apply_updates(w_k, w_k_updates)
-        delta = jax.tree.map(lambda w, x: w - x, w_k, params)
-        delta, pytree_def = jax.flatten_util.ravel_pytree(delta)
-        tmp_server_compress = compress(server_compression, compress_key, delta)
-        params = jax.tree.map(
-            lambda x, d: x + d, params, pytree_def(tmp_server_compress)
+        (_, aux), params, optimizer_state = gradient_update_fn(
+            params,
+            normalizer_params,
+            data,
+            compress_key,
+            optimizer_state=optimizer_state,
         )
+        # step = lambda data, e_k: worker_step(data, params, e_k, key, normalizer_params)
+        # (v_k, e_k), aux = jax.vmap(step)(data, e_k)
+        # v_k = jax.tree.map(lambda x: x.mean(0), v_k)
+        # w_k_updates, optimizer_state = optimizer.update(v_k, optimizer_state)
+        # w_k = optax.apply_updates(w_k, w_k_updates)
+        # delta = jax.tree.map(lambda w, x: w - x, w_k, params)
+        # delta, pytree_def = jax.flatten_util.ravel_pytree(delta)
+        # tmp_server_compress = compress(server_compression, compress_key, delta)
+        # params = jax.tree.map(
+        #     lambda x, d: x + d, params, pytree_def(tmp_server_compress)
+        # )
         return (optimizer_state, params, State(e_k, w_k), key), aux
 
     def sgd_step(
@@ -110,8 +122,10 @@ def update_fn(
 
         def convert_data(x: jnp.ndarray):
             x = jax.random.permutation(key_perm, x, axis=1)
-            x = jnp.reshape(x, (num_envs, num_minibatches, -1) + x.shape[2:])
-            x = jnp.swapaxes(x, 0, 1)
+            # FIXME (yarden): bad! this reshape is bad. Remove and use comment
+            x = jnp.reshape(x, (num_minibatches, -1) + x.shape[2:])
+            # x = jnp.reshape(x, (num_envs, num_minibatches, -1) + x.shape[2:])
+            # x = jnp.swapaxes(x, 0, 1)
             return x
 
         shuffled_data = jax.tree_util.tree_map(convert_data, data)
