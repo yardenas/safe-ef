@@ -26,7 +26,6 @@ class State(NamedTuple):
 def compress(
     compression_spec: CompressionSpec, rng: jax.Array, params: jax.Array
 ) -> Params:
-    return params
     k = int(compression_spec["k"] * len(params))
     if compression_spec["method"] == "top":
         _, ids = jax.lax.top_k(params**2, k)
@@ -34,7 +33,6 @@ def compress(
         ids = jax.random.choice(rng, params.shape[0], shape=(k,), replace=False)
     else:
         raise NotImplementedError("Compression method not implemented")
-    # TODO (yarden): figure out if using zeros this way really makes sense?
     values = params[ids]
     outs = jnp.zeros_like(params)
     outs = outs.at[ids].set(values)
@@ -60,10 +58,6 @@ def update_fn(
 ):
     loss_and_pgrad_fn = gradients.loss_and_pgrad(
         loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
-    )
-    # TODO (yarden): remove this
-    gradient_update_fn = gradients.gradient_update_fn(
-        loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
     )
 
     def worker_step(
