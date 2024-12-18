@@ -69,10 +69,9 @@ def update_fn(
             loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
         )
         (_, aux), h_i_k = loss_and_pgrad_fn(params, normalizer_params, data, key_loss)
-        x_i_k, pytree_def = jax.flatten_util.ravel_pytree(params)
-        h_i_k, _ = jax.flatten_util.ravel_pytree(h_i_k)
-        v_i_k = compress(worker_compression, key_compress, x_i_k + h_i_k)
+        h_i_k, pytree_def = jax.flatten_util.ravel_pytree(h_i_k)
         e_i_k = jax.flatten_util.ravel_pytree(e_i_k)[0]
+        v_i_k = compress(worker_compression, key_compress, e_i_k + h_i_k)
         e_i_k = e_i_k + h_i_k - v_i_k
         v_i_k = pytree_def(v_i_k)
         e_i_k = pytree_def(e_i_k)
