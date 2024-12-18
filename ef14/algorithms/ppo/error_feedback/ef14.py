@@ -121,7 +121,8 @@ def update_fn(
         key, key_perm, key_grad = jax.random.split(key, 3)
 
         def convert_data(x: jnp.ndarray):
-            x = jax.random.permutation(key_perm, x, axis=1)
+            # FIXME (yarden): permutation should be 1
+            x = jax.random.permutation(key_perm, x, axis=0)
             # FIXME (yarden): bad! this reshape is bad. Remove and use comment
             x = jnp.reshape(x, (num_minibatches, -1) + x.shape[1:])
             # x = jnp.reshape(x, (num_envs, num_minibatches, -1) + x.shape[2:])
