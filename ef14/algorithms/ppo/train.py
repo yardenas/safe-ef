@@ -142,7 +142,12 @@ def train(
     # equals to ceil(num_timesteps / (num_evals * env_step_per_training_step *
     #                                 num_resets_per_eval))
     num_training_steps_per_epoch = np.ceil(
-        num_timesteps / (num_evals_after_init * max(num_resets_per_eval, 1))
+        num_timesteps
+        / (
+            num_evals_after_init
+            * env_step_per_training_step
+            * max(num_resets_per_eval, 1)
+        )
     ).astype(int)
 
     key = jax.random.PRNGKey(seed)
