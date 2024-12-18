@@ -74,6 +74,7 @@ def update_fn(
         v_i_k = compress(worker_compression, key_compress, e_i_k + h_i_k)
         e_i_k = e_i_k + h_i_k - v_i_k
         v_i_k = pytree_def(v_i_k)
+        aux["error_magnitude"] = jnp.linalg.norm(e_i_k)
         e_i_k = pytree_def(e_i_k)
         return (v_i_k, e_i_k), aux
 
