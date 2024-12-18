@@ -15,43 +15,40 @@ def domain_randomization(sys, rng, cfg):
     @jax.vmap
     def randomize(rng):
         # Hardcoding _POLE_MASS to avoid weird jax issues.
-        pole_mass = jnp.asarray([1.0, 0.0])
+        pole_mass = jnp.asarray([1.0, 0.1])
         mask = jnp.asarray([0.0, 1.0])
-        sample = jax.random.uniform(rng, minval=cfg.min, maxval=cfg.max) * mask
-        sample = pole_mass + sample
-        return sample
+        mass_sample = (
+            jax.random.uniform(rng, minval=cfg.mass[0], maxval=cfg.mass[1]) * mask
+        )
+        mass_sample = pole_mass + mass_sample
+        rng, _ = jax.random.split(rng)
+        gear = sys.actuator.gear.copy()[0]
+        gear_sample = (
+            jax.random.uniform(rng, minval=cfg.gear[0], maxval=cfg.gear[1]) + gear
+        )
+        return mass_sample, gear_sample
 
-    samples = randomize(rng)
+    mass_sample, actuator_gear = randomize(rng)
     in_axes = jax.tree_map(lambda x: None, sys)
-    in_axes = in_axes.tree_replace({"link.inertia.mass": 0})
-    sys = sys.tree_replace({"link.inertia.mass": samples})
-    return sys, in_axes, samples
-
-
-def domain_randomization_length(sys, rng, cfg):
-    @jax.vmap
-    def randomize(rng):
-        offset = jax.random.uniform(rng, shape=(3,), minval=-0.1, maxval=0.1)
-        pos = sys.link.transform.pos.at[0].set(offset)
-        return pos
-
-    pos = randomize(rng)
-    sys_v = sys.tree_replace({"link.inertia.transform.pos": pos})
-    in_axes = jax.tree.map(lambda x: None, sys)
-    in_axes = in_axes.tree_replace({"link.inertia.transform.pos": 0})
-    return sys_v, in_axes, pos
-
-
-def domain_randomization_gear(sys, rng, cfg):
-    @jax.vmap
-    def randomize(rng):
-        sample = jax.random.uniform(rng, minval=cfg.min, maxval=cfg.max)
-        return sample
-
-    samples = randomize(rng)
-    in_axes = jax.tree_map(lambda x: None, sys)
-    in_axes = in_axes.tree_replace({"actuator.gear": 0})
-    sys = sys.tree_replace({"actuator.gear": samples})
+    in_axes = in_axes.tree_replace(
+        {
+            "link.inertia.mass": 0,
+            "actuator.gear": 0,
+        }
+    )
+    sys = sys.tree_replace(
+        {
+            "link.inertia.mass": mass_sample,
+            "actuator.gear": actuator_gear[:, None],
+        }
+    )
+    samples = jnp.stack(
+        [
+            mass_sample[:, -1],
+            actuator_gear,
+        ],
+        axis=-1,
+    )
     return sys, in_axes, samples
 
 
