@@ -135,23 +135,14 @@ def train(
     device_count = local_devices_to_use * process_count
     # The number of environment steps executed for every training step.
     env_step_per_training_step = (
-        batch_size
-        * unroll_length
-        * num_minibatches
-        * action_repeat
-        * num_trajectories_per_env
+        batch_size * unroll_length * num_minibatches * action_repeat
     )
     num_evals_after_init = max(num_evals - 1, 1)
     # The number of training_step calls per training_epoch call.
     # equals to ceil(num_timesteps / (num_evals * env_step_per_training_step *
     #                                 num_resets_per_eval))
     num_training_steps_per_epoch = np.ceil(
-        num_timesteps
-        / (
-            num_evals_after_init
-            * env_step_per_training_step
-            * max(num_resets_per_eval, 1)
-        )
+        num_timesteps / (num_evals_after_init * max(num_resets_per_eval, 1))
     ).astype(int)
 
     key = jax.random.PRNGKey(seed)
