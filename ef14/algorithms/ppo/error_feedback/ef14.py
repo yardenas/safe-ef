@@ -86,15 +86,6 @@ def update_fn(
         optimizer_state, params, ef14_state, key = carry
         e_k, w_k = ef14_state
         key, compress_key = jax.random.split(key)
-        assert data.observation.shape[0] == 1
-        # data = jax.tree.map(lambda x: x[0], data)
-        # (_, aux), params, optimizer_state = gradient_update_fn(
-        #     params,
-        #     normalizer_params,
-        #     data,
-        #     compress_key,
-        #     optimizer_state=optimizer_state,
-        # )
         step = lambda data, e_k: worker_step(data, params, e_k, key, normalizer_params)
         (v_k, e_k), aux = jax.vmap(step)(data, e_k)
         v_k = jax.tree.map(lambda x: x.mean(0), v_k)
