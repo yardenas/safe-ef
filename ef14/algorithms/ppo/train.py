@@ -135,11 +135,7 @@ def train(
     device_count = local_devices_to_use * process_count
     # The number of environment steps executed for every training step.
     env_step_per_training_step = (
-        batch_size
-        * unroll_length
-        * num_minibatches
-        * action_repeat
-        * num_trajectories_per_env
+        batch_size * unroll_length * num_minibatches * action_repeat
     )
     num_evals_after_init = max(num_evals - 1, 1)
     # The number of training_step calls per training_epoch call.
