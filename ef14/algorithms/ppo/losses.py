@@ -218,7 +218,12 @@ def compute_ppo_loss(
             discount=safety_discounting,
         )
         cost_advantages -= cost_advantages.mean()
-        cost_advantages *= rho_s
+        cost_advantages1 = rho_s * cost_advantages
+        cost_advantages2 = (
+            jnp.clip(rho_s, 1 - clipping_epsilon, 1 + clipping_epsilon)
+            * cost_advantages
+        )
+        cost_advantages = jnp.minimum(cost_advantages1, cost_advantages2)
         cost_v_error = vcs - cost_baseline
         cost_v_loss = jnp.mean(cost_v_error * cost_v_error) * 0.5 * 0.5
         ongoing_costs = data.extras["state_extras"]["cumulative_cost"].max(0).mean()
