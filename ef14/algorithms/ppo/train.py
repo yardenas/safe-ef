@@ -113,7 +113,9 @@ def train(
     if not safe:
         penalizer = None
         penalizer_params = None
-    safety_budget = (safety_budget / episode_length) / (1.0 - safety_discounting)
+    safety_budget = (
+        (safety_budget / episode_length) / (1.0 - safety_discounting) * cost_scaling
+    )
     xt = time.time()
     process_count = jax.process_count()
     process_id = jax.process_index()
