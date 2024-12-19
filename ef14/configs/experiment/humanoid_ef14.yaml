@@ -5,7 +5,7 @@ defaults:
   - override /agent/error_feedback: ef14
 
 training:
-  num_timesteps: 5000000
+  num_timesteps: 50000000
   safe: true
   num_envs: 16
   safety_budget: 100
