@@ -16,7 +16,7 @@ agent:
   num_updates_per_batch: 8
   discounting: 0.99
   batch_size: 1024
-  entropy_cost: 0.01
+  entropy_cost: 0.05
   learning_rate: 3e-4
   safety_gae_lambda: 0.65
   reward_scaling: 0.1
