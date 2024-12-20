@@ -6,5 +6,11 @@ task_params:
   sparse: false
   swingup: true
   slider_position_bound: 0.25
-min: 0.0
-max: 0.1
+
+train_params:
+  mass: [0., 1.] # mass of the pole, not cart.
+  gear: [5., 20.]
+
+eval_params:
+  mass: [0., 1.]
+  gear: [5., 20.]

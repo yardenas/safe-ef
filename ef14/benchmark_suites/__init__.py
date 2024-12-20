@@ -5,6 +5,7 @@ from brax import envs
 
 from ef14.benchmark_suites import brax
 from ef14.benchmark_suites.brax.cartpole import cartpole
+from ef14.benchmark_suites.brax.humanoid import humanoid
 from ef14.benchmark_suites.utils import get_domain_name, get_task_config
 
 
@@ -62,11 +63,15 @@ def make_brax_envs(cfg):
 
 
 randomization_fns = {
-    "cartpole_swingup": cartpole.domain_randomization,
+    "cartpole": cartpole.domain_randomization,
     "cartpole_safe": cartpole.domain_randomization,
+    "humanoid": humanoid.domain_randomization,
+    "humanoid_safe": humanoid.domain_randomization,
 }
 
 render_fns = {
     "cartpole": brax.render,
     "cartpole_safe": brax.render,
+    "humanoid": brax.render,
+    "humanoid_safe": brax.render,
 }
