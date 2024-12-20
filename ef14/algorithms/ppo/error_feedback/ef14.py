@@ -33,7 +33,6 @@ def compress(
         ids = jax.random.choice(rng, params.shape[0], shape=(k,), replace=False)
     else:
         raise NotImplementedError("Compression method not implemented")
-    # TODO (yarden): figure out if using zeros this way really makes sense?
     values = params[ids]
     outs = jnp.zeros_like(params)
     outs = outs.at[ids].set(values)
@@ -57,6 +56,10 @@ def update_fn(
     worker_compression: CompressionSpec,
     server_compression: CompressionSpec,
 ):
+    loss_and_pgrad_fn = gradients.loss_and_pgrad(
+        loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
+    )
+
     def worker_step(
         data: types.Transition,
         params,
@@ -65,15 +68,13 @@ def update_fn(
         normalizer_params,
     ):
         key, key_loss, key_compress = jax.random.split(key, 3)
-        loss_and_pgrad_fn = gradients.loss_and_pgrad(
-            loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
-        )
         (_, aux), h_i_k = loss_and_pgrad_fn(params, normalizer_params, data, key_loss)
         h_i_k, pytree_def = jax.flatten_util.ravel_pytree(h_i_k)
         e_i_k = jax.flatten_util.ravel_pytree(e_i_k)[0]
         v_i_k = compress(worker_compression, key_compress, e_i_k + h_i_k)
         e_i_k = e_i_k + h_i_k - v_i_k
         v_i_k = pytree_def(v_i_k)
+        aux["error_magnitude"] = jnp.linalg.norm(e_i_k)
         e_i_k = pytree_def(e_i_k)
         return (v_i_k, e_i_k), aux
 
@@ -108,7 +109,7 @@ def update_fn(
         key, key_perm, key_grad = jax.random.split(key, 3)
 
         def convert_data(x: jnp.ndarray):
-            x = jax.random.permutation(key_perm, x)
+            x = jax.random.permutation(key_perm, x, axis=1)
             x = jnp.reshape(x, (num_envs, num_minibatches, -1) + x.shape[2:])
             x = jnp.swapaxes(x, 0, 1)
             return x
@@ -159,11 +160,11 @@ def update_fn(
             (),
             length=batch_size * num_minibatches // num_trajectories_per_env,
         )
-        data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
         data = jax.tree_util.tree_map(
-            lambda x: jnp.reshape(x, (x.shape[3], -1, x.shape[1]) + x.shape[4:]), data
+            lambda x: jnp.reshape(x, (-1, *x.shape[2:])), data
         )
-
+        data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
+        data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
         # Update normalization params and normalize observations.
         normalizer_params = running_statistics.update(
             training_state.normalizer_params,

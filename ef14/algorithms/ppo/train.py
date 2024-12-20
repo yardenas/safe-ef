@@ -113,9 +113,7 @@ def train(
     if not safe:
         penalizer = None
         penalizer_params = None
-    safety_budget = (
-        (safety_budget / episode_length) / (1.0 - safety_discounting) * cost_scaling
-    )
+    safety_budget = (safety_budget / episode_length) / (1.0 - safety_discounting)
     xt = time.time()
     process_count = jax.process_count()
     process_id = jax.process_index()
@@ -135,11 +133,7 @@ def train(
     device_count = local_devices_to_use * process_count
     # The number of environment steps executed for every training step.
     env_step_per_training_step = (
-        batch_size
-        * unroll_length
-        * num_minibatches
-        * action_repeat
-        * num_trajectories_per_env
+        batch_size * unroll_length * num_minibatches * action_repeat
     )
     num_evals_after_init = max(num_evals - 1, 1)
     # The number of training_step calls per training_epoch call.
