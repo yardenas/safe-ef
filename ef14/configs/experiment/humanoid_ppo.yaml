@@ -11,7 +11,7 @@ training:
 
 agent:
   normalize_observations: true
-  num_minibatches: 32
+  num_minibatches: 2
   num_updates_per_batch: 2
   discounting: 0.99
   safety_discounting: 0.99
