@@ -18,6 +18,7 @@ def update_fn(
     unroll_length,
     num_minibatches,
     make_policy,
+    compute_constraint,
     num_updates_per_batch,
     batch_size,
     num_envs,
@@ -35,8 +36,17 @@ def update_fn(
     ):
         optimizer_state, params, key = carry
         key, key_loss = jax.random.split(key)
+        if safe:
+            constraint = compute_constraint(params, data, normalizer_params)
+        else:
+            constraint = None
         (_, aux), params, optimizer_state = gradient_update_fn(
-            params, normalizer_params, data, key_loss, optimizer_state=optimizer_state
+            params,
+            normalizer_params,
+            data,
+            key_loss,
+            constraint,
+            optimizer_state=optimizer_state,
         )
 
         return (optimizer_state, params, key), aux

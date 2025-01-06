@@ -214,7 +214,14 @@ def train(
         normalize_advantage=normalize_advantage,
         penalizer=penalizer,
         penalizer_params=penalizer_params,
+    )
+    compute_constraint = functools.partial(
+        ppo_losses.compute_constraint,
+        ppo_network=ppo_network,
+        cost_scaling=cost_scaling,
         safety_budget=safety_budget,
+        safety_discounting=safety_discounting,
+        safety_gae_lambda=safety_gae_lambda,
     )
     training_step, error_feedback_init = error_feedback_factory(
         loss_fn,
@@ -223,6 +230,7 @@ def train(
         unroll_length,
         num_minibatches,
         make_policy,
+        compute_constraint,
         num_updates_per_batch,
         batch_size,
         num_envs,

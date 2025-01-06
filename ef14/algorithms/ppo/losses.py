@@ -107,6 +107,7 @@ def compute_ppo_loss(
     normalizer_params: Any,
     data: types.Transition,
     rng: jnp.ndarray,
+    constraint: float | None,
     ppo_network: ppo_networks.PPONetworks,
     entropy_cost: float = 1e-4,
     discounting: float = 0.9,
@@ -119,7 +120,6 @@ def compute_ppo_loss(
     normalize_advantage: bool = True,
     penalizer: Penalizer | None = None,
     penalizer_params: Params | None = None,
-    safety_budget: float | None = None,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
     """Computes PPO loss.
 
@@ -200,6 +200,7 @@ def compute_ppo_loss(
         "entropy_loss": entropy_loss,
     }
     if penalizer is not None:
+        assert constraint is not None
         cost_value_apply = ppo_network.cost_value_network.apply
         cost = data.extras["state_extras"]["cost"] * cost_scaling
         cost_baseline = cost_value_apply(
@@ -222,7 +223,6 @@ def compute_ppo_loss(
         cost_v_error = vcs - cost_baseline
         cost_v_loss = jnp.mean(cost_v_error * cost_v_error) * 0.5 * 0.5
         ongoing_costs = data.extras["state_extras"]["cumulative_cost"].max(0).mean()
-        constraint = safety_budget - vcs.mean()
         policy_loss, penalizer_aux, penalizer_params = penalizer(
             policy_loss,
             constraint,
@@ -236,3 +236,37 @@ def compute_ppo_loss(
         aux["ongoing_costs"] = ongoing_costs
         aux |= penalizer_aux
     return total_loss, aux
+
+
+def compute_constraint(
+    params: SafePPONetworkParams,
+    data: types.Transition,
+    normalizer_params: Any,
+    *,
+    ppo_network: ppo_networks.PPONetworks,
+    cost_scaling: float,
+    safety_budget: float | None = None,
+    safety_discounting: float = 0.9,
+    safety_gae_lambda: float = 0.95,
+):
+    truncation = data.extras["state_extras"]["truncation"]
+    termination = (1 - data.discount) * (1 - truncation)
+    cost_value_apply = ppo_network.cost_value_network.apply
+    cost = data.extras["state_extras"]["cost"] * cost_scaling
+    cost_baseline = cost_value_apply(
+        normalizer_params, params.cost_value, data.observation
+    )
+    cost_bootstrap_value = cost_value_apply(
+        normalizer_params, params.cost_value, data.next_observation[-1]
+    )
+    vcs, _ = compute_gae(
+        truncation=truncation,
+        termination=termination,
+        rewards=cost,
+        values=cost_baseline,
+        bootstrap_value=cost_bootstrap_value,
+        lambda_=safety_gae_lambda,
+        discount=safety_discounting,
+    )
+    constraint = safety_budget - vcs.mean()
+    return constraint
