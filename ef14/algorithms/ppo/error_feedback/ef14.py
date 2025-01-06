@@ -46,6 +46,7 @@ def update_fn(
     unroll_length,
     num_minibatches,
     make_policy,
+    compute_constraint,
     num_updates_per_batch,
     batch_size,
     num_envs,
@@ -66,9 +67,12 @@ def update_fn(
         e_i_k,
         key,
         normalizer_params,
+        constraint,
     ):
         key, key_loss, key_compress = jax.random.split(key, 3)
-        (_, aux), h_i_k = loss_and_pgrad_fn(params, normalizer_params, data, key_loss)
+        (_, aux), h_i_k = loss_and_pgrad_fn(
+            params, normalizer_params, data, key_loss, constraint
+        )
         h_i_k, pytree_def = jax.flatten_util.ravel_pytree(h_i_k)
         e_i_k = jax.flatten_util.ravel_pytree(e_i_k)[0]
         v_i_k = compress(worker_compression, key_compress, e_i_k + h_i_k)
@@ -86,7 +90,13 @@ def update_fn(
         optimizer_state, params, ef14_state, key = carry
         e_k, w_k = ef14_state
         key, compress_key = jax.random.split(key)
-        step = lambda data, e_k: worker_step(data, params, e_k, key, normalizer_params)
+        if safe:
+            constraint = compute_constraint(params, data, normalizer_params)
+        else:
+            constraint = None
+        step = lambda data, e_k: worker_step(
+            data, params, e_k, key, normalizer_params, constraint
+        )
         (v_k, e_k), aux = jax.vmap(step)(data, e_k)
         v_k = jax.tree.map(lambda x: x.mean(0), v_k)
         w_k_updates, optimizer_state = optimizer.update(v_k, optimizer_state)

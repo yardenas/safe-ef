@@ -46,6 +46,7 @@ ErrorFeedbackFactory: TypeAlias = Callable[
         int,
         int,
         Callable[[Any], types.Policy],
+        Callable[[Any], float],
         int,
         int,
         int,
