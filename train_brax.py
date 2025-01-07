@@ -26,9 +26,12 @@ def get_state_path() -> str:
 def get_penalizer(cfg):
     if cfg.agent.penalizer.name == "lagrangian":
         penalizer = Lagrangian(cfg.agent.penalizer.multiplier_lr)
+        init_lagrange_multiplier = jax.numpy.log(
+            jax.numpy.exp(cfg.agent.penalizer.initial_lagrange_multiplier) - 1.0
+        )
         penalizer_state = LagrangianParams(
-            cfg.agent.penalizer.initial_lagrange_multiplier,
-            penalizer.optimizer.init(cfg.agent.penalizer.initial_lagrange_multiplier),
+            init_lagrange_multiplier,
+            penalizer.optimizer.init(init_lagrange_multiplier),
         )
     elif cfg.agent.penalizer.name == "crpo":
         penalizer = CRPO(cfg.agent.penalizer.eta, cfg.agent.penalizer.cost_scale)
@@ -59,46 +62,7 @@ def get_error_feedback(cfg):
 
 
 def get_train_fn(cfg):
-    if cfg.agent.name == "sac":
-        import jax.nn as jnn
-
-        import ef14.algorithms.sac.networks as sac_networks
-        import ef14.algorithms.sac.train as sac
-
-        agent_cfg = dict(cfg.agent)
-        training_cfg = {
-            k: v
-            for k, v in cfg.training.items()
-            if k
-            not in [
-                "render_episodes",
-                "train_domain_randomization",
-                "eval_domain_randomization",
-                "render",
-                "store_policy",
-                "num_resets_per_eval",
-            ]
-        }
-        hidden_layer_sizes = agent_cfg.pop("hidden_layer_sizes")
-        activation = getattr(jnn, agent_cfg.pop("activation"))
-        del agent_cfg["name"]
-        network_factory = functools.partial(
-            sac_networks.make_sac_networks,
-            hidden_layer_sizes=hidden_layer_sizes,
-            activation=activation,
-        )
-        penalizer, penalizer_params = get_penalizer(cfg)
-        agent_cfg.pop("penalizer")
-        train_fn = functools.partial(
-            sac.train,
-            **agent_cfg,
-            **training_cfg,
-            network_factory=network_factory,
-            checkpoint_logdir=f"{get_state_path()}/ckpt",
-            penalizer=penalizer,
-            penalizer_params=penalizer_params,
-        )
-    elif cfg.agent.name == "ppo":
+    if cfg.agent.name == "ppo":
         import jax.nn as jnn
 
         import ef14.algorithms.ppo.networks as ppo_networks
