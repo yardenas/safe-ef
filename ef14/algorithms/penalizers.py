@@ -83,9 +83,7 @@ class Lagrangian:
             params.optimizer_state,
         )
         lagrange_multiplier = jnn.softplus(new_lagrange_multiplier)
-        aux = {
-            f"lagrange_multiplier_{i}": val for i, val in enumerate(lagrange_multiplier)
-        }
+        aux = {"lagrange_multiplier": lagrange_multiplier}
         aux["lagrange_multiplier_loss"] = loss
         return aux, LagrangianParams(new_lagrange_multiplier, new_optimizer_state)
 
@@ -99,5 +97,5 @@ def update_lagrange_multiplier(
     loss = lambda multiplier: multiplier * constraint
     loss, grad = jax.value_and_grad(loss)(lagrange_multiplier)
     updates, new_optimizer_state = optimizer.update(grad, optimizer_state)
-    new_multiplier = optax.apply_updates(updates)
+    new_multiplier = optax.apply_updates(lagrange_multiplier, updates)
     return new_multiplier, new_optimizer_state, loss
