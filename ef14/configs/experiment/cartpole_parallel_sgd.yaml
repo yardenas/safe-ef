@@ -26,9 +26,9 @@ agent:
   safety_gae_lambda: 0.65
   reward_scaling: 0.5
   num_trajectories_per_env: 2048
-  # TODO (yarden): should include the `no_error_feedback_flag` too
   error_feedback:
     worker_compression:
       k: 1.
     server_compression:
       k: 1
+  no_error_feedback: true
