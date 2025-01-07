@@ -5,3 +5,4 @@ worker_compression:
 server_compression:
   k: 0.99
   method: top
+no_error_feedback: false
