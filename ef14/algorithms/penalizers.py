@@ -44,7 +44,9 @@ class CRPO:
         )
         return actor_loss, {}
 
-    def update(self, constraint: jax.Array, params: Params) -> tuple[jax.Array, Params]:
+    def update(
+        self, constraint: jax.Array, params: Params
+    ) -> tuple[dict[str, Any], Params]:
         return {}, params
 
 

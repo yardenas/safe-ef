@@ -231,7 +231,6 @@ def compute_ppo_loss(
         )
         total_loss = policy_loss + v_loss + entropy_loss + cost_v_loss
         aux["constraint_estimate"] = constraint
-        aux["penalizer_params"] = penalizer_params
         aux["cost_v_loss"] = cost_v_loss
         aux["ongoing_costs"] = ongoing_costs
         aux |= penalizer_aux
