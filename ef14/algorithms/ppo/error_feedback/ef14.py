@@ -56,6 +56,7 @@ def update_fn(
     num_trajectories_per_env,
     worker_compression: CompressionSpec,
     server_compression: CompressionSpec,
+    no_error_feedback: bool = False,
 ):
     loss_and_pgrad_fn = gradients.loss_and_pgrad(
         loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
@@ -75,6 +76,8 @@ def update_fn(
         )
         h_i_k, pytree_def = jax.flatten_util.ravel_pytree(h_i_k)
         e_i_k = jax.flatten_util.ravel_pytree(e_i_k)[0]
+        if no_error_feedback:
+            e_i_k = jnp.zeros_like(e_i_k)
         v_i_k = compress(worker_compression, key_compress, e_i_k + h_i_k)
         e_i_k = e_i_k + h_i_k - v_i_k
         v_i_k = pytree_def(v_i_k)
