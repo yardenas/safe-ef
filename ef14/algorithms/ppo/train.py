@@ -231,6 +231,7 @@ def train(
         num_minibatches,
         make_policy,
         compute_constraint,
+        penalizer.update if penalizer is not None else None,
         num_updates_per_batch,
         batch_size,
         num_envs,

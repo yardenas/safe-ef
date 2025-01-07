@@ -19,6 +19,7 @@ def update_fn(
     num_minibatches,
     make_policy,
     compute_constraint,
+    update_penalizer_state,
     num_updates_per_batch,
     batch_size,
     num_envs,
@@ -34,7 +35,7 @@ def update_fn(
         data: types.Transition,
         normalizer_params: running_statistics.RunningStatisticsState,
     ):
-        optimizer_state, params, key = carry
+        optimizer_state, params, penalizer_params, key = carry
         key, key_loss = jax.random.split(key)
         if safe:
             constraint = compute_constraint(params, data, normalizer_params)
@@ -48,8 +49,12 @@ def update_fn(
             constraint,
             optimizer_state=optimizer_state,
         )
-
-        return (optimizer_state, params, key), aux
+        if safe:
+            penalizer_aux, penalizer_params = update_penalizer_state(
+                constraint, penalizer_params
+            )
+            aux |= penalizer_aux
+        return (optimizer_state, params, penalizer_params, key), aux
 
     def sgd_step(
         carry,
@@ -57,7 +62,7 @@ def update_fn(
         data: types.Transition,
         normalizer_params: running_statistics.RunningStatisticsState,
     ):
-        optimizer_state, params, key = carry
+        optimizer_state, params, penalizer_params, key = carry
         key, key_perm, key_grad = jax.random.split(key, 3)
 
         def convert_data(x: jnp.ndarray):
@@ -66,13 +71,13 @@ def update_fn(
             return x
 
         shuffled_data = jax.tree_util.tree_map(convert_data, data)
-        (optimizer_state, params, _), aux = jax.lax.scan(
+        (optimizer_state, params, penalizer_params, _), aux = jax.lax.scan(
             functools.partial(minibatch_step, normalizer_params=normalizer_params),
-            (optimizer_state, params, key_grad),
+            (optimizer_state, params, penalizer_params, key_grad),
             shuffled_data,
             length=num_minibatches,
         )
-        return (optimizer_state, params, key), aux
+        return (optimizer_state, params, penalizer_params, key), aux
 
     def training_step(
         carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t
@@ -128,9 +133,14 @@ def update_fn(
             pmap_axis_name=_PMAP_AXIS_NAME,
         )
 
-        (optimizer_state, params, _), aux = jax.lax.scan(
+        (optimizer_state, params, penalizer_params, _), aux = jax.lax.scan(
             functools.partial(sgd_step, data=data, normalizer_params=normalizer_params),
-            (training_state.optimizer_state, training_state.params, key_sgd),
+            (
+                training_state.optimizer_state,
+                training_state.params,
+                training_state.penalizer_params,
+                key_sgd,
+            ),
             (),
             length=num_updates_per_batch,
         )
@@ -139,7 +149,7 @@ def update_fn(
             optimizer_state=optimizer_state,
             params=params,
             normalizer_params=normalizer_params,
-            penalizer_params=aux.pop("penalizer_params", None),
+            penalizer_params=penalizer_params,
             env_steps=training_state.env_steps + env_step_per_training_step,
             error_feedback_state=aux.pop("error_feedback_state", None),
         )  # type: ignore
