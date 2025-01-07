@@ -26,6 +26,8 @@ class State(NamedTuple):
 def compress(
     compression_spec: CompressionSpec, rng: jax.Array, params: jax.Array
 ) -> Params:
+    if compression_spec["k"] == 1:
+        return params
     k = int(compression_spec["k"] * len(params))
     if compression_spec["method"] == "top":
         _, ids = jax.lax.top_k(params**2, k)
