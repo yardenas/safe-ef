@@ -47,6 +47,7 @@ ErrorFeedbackFactory: TypeAlias = Callable[
         int,
         Callable[[Any], types.Policy],
         Callable[[Any], float],
+        Callable[[float, Params], Tuple[dict[str, Any], Params]] | None,
         int,
         int,
         int,
