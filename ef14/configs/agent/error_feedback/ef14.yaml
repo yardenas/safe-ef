@@ -3,6 +3,6 @@ worker_compression:
   k: 0.1
   method: top
 server_compression:
-  k: 0.99
+  k: 1.
   method: top
 no_error_feedback: false
