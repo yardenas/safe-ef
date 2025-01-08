@@ -28,16 +28,21 @@ def compress(
 ) -> Params:
     if compression_spec["k"] == 1:
         return params
+    # We use scaling to make the compression contractive
+    # See: “Sparsified SGD with Memory” section 2.2
+    # TODO (yarden): scale random correctly.
     k = int(compression_spec["k"] * len(params))
     if compression_spec["method"] == "top":
         _, ids = jax.lax.top_k(params**2, k)
+        scale = 1.0
     elif compression_spec["method"] == "random":
         ids = jax.random.choice(rng, params.shape[0], shape=(k,), replace=False)
+        scale = 1.0
     else:
         raise NotImplementedError("Compression method not implemented")
     values = params[ids]
     outs = jnp.zeros_like(params)
-    outs = outs.at[ids].set(values)
+    outs = outs.at[ids].set(values * scale)
     return outs
 
 
