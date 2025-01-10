@@ -27,4 +27,4 @@ agent:
       k: 1.
     server_compression:
       k: 1
-  no_error_feedback: true
+    no_error_feedback: true

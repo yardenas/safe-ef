@@ -3982,6 +3982,24 @@ test = ["pyinstrument", "pytest", "pytest-cov", "ruff"]
 test-more = ["coveralls", "ezdxf", "matplotlib", "pymeshlab", "pyright", "pytest-beartype", "triangle"]
 
 [[package]]
+name = "tueplots"
+version = "0.0.17"
+description = "Scientific plotting made easy."
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "tueplots-0.0.17-py3-none-any.whl", hash = "sha256:3f5843ae63e374eadb355d10daeadfaef87734510fe7b9a8ce017bf5b9760856"},
+]
+
+[package.dependencies]
+matplotlib = "*"
+numpy = "*"
+
+[package.extras]
+ci = ["tox"]
+examples = ["jupyter"]
+
+[[package]]
 name = "types-tabulate"
 version = "0.9.0.20240106"
 description = "Typing stubs for tabulate"
@@ -4139,4 +4157,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10,<3.12"
-content-hash = "d23a21f04981153146312a28f473071dcc5dcda2f2646c5e4a0800c7b9ed7632"
+content-hash = "d0a8d6b4339b8429a15373dad9a537b4126c3651c2bcefdddd94de5e7e52ff4a"
