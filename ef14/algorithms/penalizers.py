@@ -94,7 +94,7 @@ def update_lagrange_multiplier(
     optimizer: optax.GradientTransformation,
     optimizer_state: optax.OptState,
 ) -> jax.Array:
-    loss = lambda multiplier: -multiplier * constraint
+    loss = lambda multiplier: multiplier * constraint
     loss, grad = jax.value_and_grad(loss)(lagrange_multiplier)
     updates, new_optimizer_state = optimizer.update(grad, optimizer_state)
     new_multiplier = optax.apply_updates(lagrange_multiplier, updates)
