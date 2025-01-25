@@ -53,7 +53,6 @@ def update_fn(
             params, normalizer_params, data, key_loss, constraint
         )
         grad_f_i, pytree_def = jax.flatten_util.ravel_pytree(grad_f_i)
-        g_i_k = jax.flatten_util.ravel_pytree(g_i_k)[0]
         c_i_t = compress(worker_compression, key_compress, grad_f_i - g_i_k)
         g_i_k = g_i_k + c_i_t
         c_i_t = pytree_def(c_i_t)
