@@ -6,7 +6,7 @@ defaults:
 
 training:
   num_timesteps: 500000000
-  safe: true
+  safe: false
   num_envs: 16
   safety_budget: 100
 

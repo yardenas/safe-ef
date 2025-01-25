@@ -88,10 +88,7 @@ def update_fn(
         normalizer_params: running_statistics.RunningStatisticsState,
     ):
         optimizer_state, params, penalizer_params, g_k, key = carry
-        if safe:
-            constraint = compute_constraint(params, data, normalizer_params)
-        else:
-            constraint = None
+        constraint = None
         step = lambda data, g_k: worker_step(
             data, params, g_k, key, normalizer_params, constraint
         )
@@ -100,11 +97,6 @@ def update_fn(
         g_k = g_k + c_k
         g_k_updates, optimizer_state = optimizer.update(g_k, optimizer_state)
         params = optax.apply_updates(params, g_k_updates)
-        if safe:
-            penalizer_aux, penalizer_params = update_penalizer_state(
-                constraint, penalizer_params
-            )
-            aux |= penalizer_aux
         return (optimizer_state, params, penalizer_params, State(g_k), key), aux
 
     def sgd_step(
