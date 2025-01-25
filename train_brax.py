@@ -56,6 +56,16 @@ def get_error_feedback(cfg):
             **ef14_cfg,
             num_trajectories_per_env=cfg.agent.num_trajectories_per_env,
         )
+    elif cfg.agent.error_feedback.name == "ef21":
+        import ef14.algorithms.ppo.error_feedback.ef21 as ef21
+
+        ef21_cfg = dict(cfg.agent.error_feedback)
+        ef21_cfg.pop("name")
+        error_feedback = functools.partial(
+            ef21.update_fn,
+            **ef21_cfg,
+            num_trajectories_per_env=cfg.agent.num_trajectories_per_env,
+        )
     else:
         raise ValueError(f"Unknown error feedback {cfg.agent.error_feedback}")
     return error_feedback
