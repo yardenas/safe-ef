@@ -1,0 +1,4 @@
+name: ef21
+worker_compression:
+  k: 0.1
+  method: top
