@@ -27,8 +27,4 @@ agent:
   reward_scaling: 0.5
   num_trajectories_per_env: 2048
   error_feedback:
-    worker_compression:
-      k: 1.
-    server_compression:
-      k: 1
     no_error_feedback: true
