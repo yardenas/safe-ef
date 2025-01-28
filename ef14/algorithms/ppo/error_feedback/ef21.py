@@ -15,8 +15,8 @@ from ef14.algorithms.ppo.error_feedback.compression import CompressionSpec, comp
 
 
 class State(NamedTuple):
-    e_k: jax.Array
-    w_k: jax.Array
+    g_k_i: types.Params
+    g_k: types.Params
 
 
 def update_fn(
@@ -36,67 +36,49 @@ def update_fn(
     *,
     num_trajectories_per_env,
     worker_compression: CompressionSpec,
-    server_compression: CompressionSpec,
-    no_error_feedback: bool = False,
 ):
     loss_and_pgrad_fn = gradients.loss_and_pgrad(
         loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
     )
+    assert not safe
 
     def worker_step(
         data: types.Transition,
         params,
-        e_i_k,
+        g_i_k,
         key,
         normalizer_params,
         constraint,
     ):
         key, key_loss, key_compress = jax.random.split(key, 3)
-        (_, aux), h_i_k = loss_and_pgrad_fn(
+        (_, aux), grad_f_i = loss_and_pgrad_fn(
             params, normalizer_params, data, key_loss, constraint
         )
-        h_i_k, pytree_def = jax.flatten_util.ravel_pytree(h_i_k)
-        e_i_k = jax.flatten_util.ravel_pytree(e_i_k)[0]
-        if no_error_feedback:
-            e_i_k = jnp.zeros_like(e_i_k)
-        v_i_k = compress(worker_compression, key_compress, e_i_k + h_i_k)
-        e_i_k = e_i_k + h_i_k - v_i_k
-        v_i_k = pytree_def(v_i_k)
-        aux["error_magnitude"] = jnp.linalg.norm(e_i_k)
-        e_i_k = pytree_def(e_i_k)
-        return (v_i_k, e_i_k), aux
+        grad_f_i, pytree_def = jax.flatten_util.ravel_pytree(grad_f_i)
+        g_i_k = jax.flatten_util.ravel_pytree(g_i_k)[0]
+        c_i_k = compress(worker_compression, key_compress, grad_f_i - g_i_k)
+        g_i_k = g_i_k + c_i_k
+        c_i_k = pytree_def(c_i_k)
+        aux["error_magnitude"] = jnp.linalg.norm(g_i_k)
+        g_i_k = pytree_def(g_i_k)
+        return c_i_k, g_i_k, aux
 
     def minibatch_step(
         carry,
         data: types.Transition,
         normalizer_params: running_statistics.RunningStatisticsState,
     ):
-        optimizer_state, params, penalizer_params, ef14_state, key = carry
-        e_k, w_k = ef14_state
-        key, compress_key = jax.random.split(key)
-        if safe:
-            constraint = compute_constraint(params, data, normalizer_params)
-        else:
-            constraint = None
-        step = lambda data, e_k: worker_step(
-            data, params, e_k, key, normalizer_params, constraint
+        optimizer_state, params, penalizer_params, ef21_state, key = carry
+        constraint = None
+        step = lambda data, g_k_i: worker_step(
+            data, params, g_k_i, key, normalizer_params, constraint
         )
-        (v_k, e_k), aux = jax.vmap(step)(data, e_k)
-        v_k = jax.tree.map(lambda x: x.mean(0), v_k)
-        w_k_updates, optimizer_state = optimizer.update(v_k, optimizer_state)
-        w_k = optax.apply_updates(w_k, w_k_updates)
-        delta = jax.tree.map(lambda w, x: w - x, w_k, params)
-        delta, pytree_def = jax.flatten_util.ravel_pytree(delta)
-        tmp_server_compress = compress(server_compression, compress_key, delta)
-        params = jax.tree.map(
-            lambda x, d: x + d, params, pytree_def(tmp_server_compress)
-        )
-        if safe:
-            penalizer_aux, penalizer_params = update_penalizer_state(
-                constraint, penalizer_params
-            )
-            aux |= penalizer_aux
-        return (optimizer_state, params, penalizer_params, State(e_k, w_k), key), aux
+        c_k_i, g_k_i, aux = jax.vmap(step)(data, ef21_state.g_k_i)
+        c_k = jax.tree.map(lambda x: x.mean(0), c_k_i)
+        g_k = jax.tree.map(lambda g, c: g + c, ef21_state.g_k, c_k)
+        g_k_updates, optimizer_state = optimizer.update(g_k, optimizer_state)
+        params = optax.apply_updates(params, g_k_updates)
+        return (optimizer_state, params, penalizer_params, State(g_k_i, g_k), key), aux
 
     def sgd_step(
         carry,
@@ -104,7 +86,7 @@ def update_fn(
         data: types.Transition,
         normalizer_params: running_statistics.RunningStatisticsState,
     ):
-        optimizer_state, params, penalizer_params, ef14_state, key = carry
+        optimizer_state, params, penalizer_params, ef21_state, key = carry
         key, key_perm, key_grad = jax.random.split(key, 3)
 
         def convert_data(x: jnp.ndarray):
@@ -114,13 +96,13 @@ def update_fn(
             return x
 
         shuffled_data = jax.tree_util.tree_map(convert_data, data)
-        (optimizer_state, params, penalizer_params, ef14_state, _), aux = jax.lax.scan(
+        (optimizer_state, params, penalizer_params, ef21_state, _), aux = jax.lax.scan(
             functools.partial(minibatch_step, normalizer_params=normalizer_params),
-            (optimizer_state, params, penalizer_params, ef14_state, key_grad),
+            (optimizer_state, params, penalizer_params, ef21_state, key_grad),
             shuffled_data,
             length=num_minibatches,
         )
-        return (optimizer_state, params, penalizer_params, ef14_state, key), aux
+        return (optimizer_state, params, penalizer_params, ef21_state, key), aux
 
     def training_step(
         carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t
@@ -198,8 +180,8 @@ def update_fn(
         return (new_training_state, state, new_key), aux
 
     def init(ppo_params):
-        make_e_k = lambda dummy: jax.tree.map(lambda x: jnp.zeros_like(x), ppo_params)
-        make_e_k = jax.vmap(make_e_k)
-        return State(make_e_k(jnp.asarray(range(num_envs))), ppo_params)
+        make_g_k = lambda dummy: jax.tree.map(lambda x: jnp.zeros_like(x), ppo_params)
+        make_g_k_i = jax.vmap(make_g_k)
+        return State(make_g_k_i(jnp.asarray(range(num_envs))), make_g_k(1))
 
     return training_step, init
