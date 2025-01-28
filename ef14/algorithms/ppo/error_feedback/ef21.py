@@ -56,12 +56,12 @@ def update_fn(
         )
         grad_f_i, pytree_def = jax.flatten_util.ravel_pytree(grad_f_i)
         g_i_k = jax.flatten_util.ravel_pytree(g_i_k)[0]
-        c_i_t = compress(worker_compression, key_compress, grad_f_i - g_i_k)
-        g_i_k = g_i_k + c_i_t
-        c_i_t = pytree_def(c_i_t)
+        c_i_k = compress(worker_compression, key_compress, grad_f_i - g_i_k)
+        g_i_k = g_i_k + c_i_k
+        c_i_k = pytree_def(c_i_k)
         aux["error_magnitude"] = jnp.linalg.norm(g_i_k)
         g_i_k = pytree_def(g_i_k)
-        return c_i_t, g_i_k, aux
+        return c_i_k, g_i_k, aux
 
     def minibatch_step(
         carry,
