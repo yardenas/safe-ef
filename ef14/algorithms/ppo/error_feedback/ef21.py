@@ -15,7 +15,8 @@ from ef14.algorithms.ppo.error_feedback.compression import CompressionSpec, comp
 
 
 class State(NamedTuple):
-    g_k: jax.Array
+    g_k_i: types.Params
+    g_k: types.Params
 
 
 def update_fn(
@@ -39,6 +40,7 @@ def update_fn(
     loss_and_pgrad_fn = gradients.loss_and_pgrad(
         loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
     )
+    assert not safe
 
     def worker_step(
         data: types.Transition,
@@ -53,28 +55,30 @@ def update_fn(
             params, normalizer_params, data, key_loss, constraint
         )
         grad_f_i, pytree_def = jax.flatten_util.ravel_pytree(grad_f_i)
+        g_i_k = jax.flatten_util.ravel_pytree(g_i_k)[0]
         c_i_t = compress(worker_compression, key_compress, grad_f_i - g_i_k)
         g_i_k = g_i_k + c_i_t
         c_i_t = pytree_def(c_i_t)
         aux["error_magnitude"] = jnp.linalg.norm(g_i_k)
-        return c_i_t, aux
+        g_i_k = pytree_def(g_i_k)
+        return c_i_t, g_i_k, aux
 
     def minibatch_step(
         carry,
         data: types.Transition,
         normalizer_params: running_statistics.RunningStatisticsState,
     ):
-        optimizer_state, params, penalizer_params, g_k, key = carry
+        optimizer_state, params, penalizer_params, ef21_state, key = carry
         constraint = None
-        step = lambda data, g_k: worker_step(
-            data, params, g_k, key, normalizer_params, constraint
+        step = lambda data, g_k_i: worker_step(
+            data, params, g_k_i, key, normalizer_params, constraint
         )
-        c_k, aux = jax.vmap(step)(data, g_k)
-        c_k = jax.tree.map(lambda x: x.mean(0), c_k)
-        g_k = g_k + c_k
+        c_k_i, g_k_i, aux = jax.vmap(step)(data, ef21_state.g_k_i)
+        c_k = jax.tree.map(lambda x: x.mean(0), c_k_i)
+        g_k = jax.tree.map(lambda g, c: g + c, ef21_state.g_k, c_k)
         g_k_updates, optimizer_state = optimizer.update(g_k, optimizer_state)
         params = optax.apply_updates(params, g_k_updates)
-        return (optimizer_state, params, penalizer_params, State(g_k), key), aux
+        return (optimizer_state, params, penalizer_params, State(g_k_i, g_k), key), aux
 
     def sgd_step(
         carry,
@@ -177,7 +181,7 @@ def update_fn(
 
     def init(ppo_params):
         make_g_k = lambda dummy: jax.tree.map(lambda x: jnp.zeros_like(x), ppo_params)
-        make_g_k = jax.vmap(make_g_k)
-        return State(make_g_k(jnp.asarray(range(num_envs))))
+        make_g_k_i = jax.vmap(make_g_k)
+        return State(make_g_k_i(jnp.asarray(range(num_envs))), make_g_k(1))
 
     return training_step, init
