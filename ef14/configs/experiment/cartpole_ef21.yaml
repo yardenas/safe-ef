@@ -25,3 +25,6 @@ agent:
   safety_gae_lambda: 0.65
   reward_scaling: 0.5
   num_trajectories_per_env: 2048
+  error_feedback:
+    worker_compression:
+      k: 0.01
