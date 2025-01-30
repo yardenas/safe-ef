@@ -86,7 +86,7 @@ def make_ppo_networks(
         hidden_layer_sizes=value_hidden_layer_sizes,
         activation=activation,
     )
-    # TODO (yarden): maybe softplus here?
+    # TODO (anon): maybe softplus here?
     cost_value_network = networks.make_value_network(
         observation_size,
         preprocess_observations_fn=preprocess_observations_fn,
