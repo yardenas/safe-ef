@@ -2,7 +2,6 @@
 defaults:
   - override /environment: humanoid
   - override /agent: ppo
-  - override /agent/penalizer: lagrangian
   - override /agent/error_feedback: ef14
 
 training:
