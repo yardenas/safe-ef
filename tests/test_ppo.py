@@ -17,7 +17,7 @@
 from absl.testing import absltest, parameterized
 from brax import envs
 
-from ef14.algorithms.ppo import train as ppo
+from safe_ef.algorithms.ppo import train as ppo
 
 
 class PPOTest(parameterized.TestCase):

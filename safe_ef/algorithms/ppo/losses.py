@@ -26,7 +26,7 @@ from brax.training import types
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.types import Params
 
-from ef14.algorithms.penalizers import Penalizer
+from safe_ef.algorithms.penalizers import Penalizer
 
 
 @flax.struct.dataclass

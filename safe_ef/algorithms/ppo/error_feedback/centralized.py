@@ -8,7 +8,7 @@ from brax.training import acting, gradients, types
 from brax.training.acme import running_statistics
 from brax.training.types import PRNGKey
 
-from ef14.algorithms.ppo import _PMAP_AXIS_NAME, Metrics, TrainingState
+from safe_ef.algorithms.ppo import _PMAP_AXIS_NAME, Metrics, TrainingState
 
 
 def update_fn(

@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "ef14"
+name = "safe_ef"
 version = "0.1.0"
 description = ""
-authors = ["Yarden <yarden.as@inf.ethz.ch>"]
+authors = ["Anon <anon>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]

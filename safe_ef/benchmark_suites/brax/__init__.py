@@ -2,8 +2,8 @@ import jax
 import numpy as np
 from brax.io import image
 
-from ef14.common.pytree import pytrees_unstack
-from ef14.rl.utils import rollout
+from safe_ef.common.pytree import pytrees_unstack
+from safe_ef.rl.utils import rollout
 
 
 def render(env, policy, steps, rng):

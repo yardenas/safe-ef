@@ -3,10 +3,10 @@ import functools
 import jax
 from brax import envs
 
-from ef14.benchmark_suites import brax
-from ef14.benchmark_suites.brax.cartpole import cartpole
-from ef14.benchmark_suites.brax.humanoid import humanoid
-from ef14.benchmark_suites.utils import get_domain_name, get_task_config
+from safe_ef.benchmark_suites import brax
+from safe_ef.benchmark_suites.brax.cartpole import cartpole
+from safe_ef.benchmark_suites.brax.humanoid import humanoid
+from safe_ef.benchmark_suites.utils import get_domain_name, get_task_config
 
 
 def make(cfg):

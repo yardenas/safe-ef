@@ -34,20 +34,20 @@ from brax.v1 import envs as envs_v1
 from etils import epath
 from orbax import checkpoint as ocp
 
-from ef14.algorithms.penalizers import Penalizer
-from ef14.algorithms.ppo import (
+from safe_ef.algorithms.penalizers import Penalizer
+from safe_ef.algorithms.ppo import (
     _PMAP_AXIS_NAME,
     ErrorFeedbackFactory,
     Metrics,
     TrainingState,
 )
-from ef14.algorithms.ppo import (
+from safe_ef.algorithms.ppo import (
     losses as ppo_losses,
 )
-from ef14.algorithms.ppo import networks as ppo_networks
-from ef14.algorithms.ppo.error_feedback import centralized
-from ef14.benchmark_suites.wrappers import TrackOnlineCosts
-from ef14.rl.evaluation import ConstraintsEvaluator
+from safe_ef.algorithms.ppo import networks as ppo_networks
+from safe_ef.algorithms.ppo.error_feedback import centralized
+from safe_ef.benchmark_suites.wrappers import TrackOnlineCosts
+from safe_ef.rl.evaluation import ConstraintsEvaluator
 
 
 def _unpmap(v):

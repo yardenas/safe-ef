@@ -8,7 +8,7 @@ from brax.envs import Env, Wrapper, register_environment
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 
-from ef14.benchmark_suites import rewards
+from safe_ef.benchmark_suites import rewards
 
 
 def domain_randomization(sys, rng, cfg):

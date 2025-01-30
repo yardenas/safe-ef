@@ -7,13 +7,13 @@ import jax
 from brax.io import model
 from omegaconf import OmegaConf
 
-from ef14 import benchmark_suites
-from ef14.algorithms.penalizers import (
+from safe_ef import benchmark_suites
+from safe_ef.algorithms.penalizers import (
     CRPO,
     Lagrangian,
     LagrangianParams,
 )
-from ef14.common.logging import TrainingLogger
+from safe_ef.common.logging import TrainingLogger
 
 _LOG = logging.getLogger(__name__)
 
@@ -43,11 +43,11 @@ def get_penalizer(cfg):
 
 def get_error_feedback(cfg):
     if cfg.agent.error_feedback.name == "centralized":
-        import ef14.algorithms.ppo.error_feedback.centralized as centralized
+        import safe_ef.algorithms.ppo.error_feedback.centralized as centralized
 
         error_feedback = centralized.update_fn
     elif cfg.agent.error_feedback.name == "ef14":
-        import ef14.algorithms.ppo.error_feedback.ef14 as ef14
+        import safe_ef.algorithms.ppo.error_feedback.ef14 as ef14
 
         ef14_cfg = dict(cfg.agent.error_feedback)
         ef14_cfg.pop("name")
@@ -57,7 +57,7 @@ def get_error_feedback(cfg):
             num_trajectories_per_env=cfg.agent.num_trajectories_per_env,
         )
     elif cfg.agent.error_feedback.name == "ef21":
-        import ef14.algorithms.ppo.error_feedback.ef21 as ef21
+        import safe_ef.algorithms.ppo.error_feedback.ef21 as ef21
 
         ef21_cfg = dict(cfg.agent.error_feedback)
         ef21_cfg.pop("name")
@@ -75,8 +75,8 @@ def get_train_fn(cfg):
     if cfg.agent.name == "ppo":
         import jax.nn as jnn
 
-        import ef14.algorithms.ppo.networks as ppo_networks
-        import ef14.algorithms.ppo.train as ppo
+        import safe_ef.algorithms.ppo.networks as ppo_networks
+        import safe_ef.algorithms.ppo.train as ppo
 
         agent_cfg = dict(cfg.agent)
         training_cfg = {
@@ -131,7 +131,7 @@ def report(logger, step, num_steps, metrics):
     step.count = num_steps
 
 
-@hydra.main(version_base=None, config_path="ef14/configs", config_name="train_brax")
+@hydra.main(version_base=None, config_path="safe_ef/configs", config_name="train_brax")
 def main(cfg):
     _LOG.info(
         f"Setting up experiment with the following configuration: "
