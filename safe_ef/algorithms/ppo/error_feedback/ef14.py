@@ -44,12 +44,7 @@ def update_fn(
     )
 
     def worker_step(
-        data: types.Transition,
-        params,
-        e_i_k,
-        key,
-        normalizer_params,
-        constraint,
+        data: types.Transition, params, e_i_k, key, normalizer_params, constraint
     ):
         key, key_loss, key_compress = jax.random.split(key, 3)
         (_, aux), h_i_k = loss_and_pgrad_fn(
