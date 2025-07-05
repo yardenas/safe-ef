@@ -61,6 +61,7 @@ python train_brax.py --help
 ```
 This will display all available options and configurations.
 
+## Cite
 Check out our ICML paper:
 ```
 @inproceedings{islamovsafe,
