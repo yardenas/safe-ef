@@ -61,3 +61,11 @@ python train_brax.py --help
 ```
 This will display all available options and configurations.
 
+Check out our ICML paper:
+```
+@inproceedings{islamovsafe,
+  title={Safe-EF: Error Feedback for Non-smooth Constrained Optimization},
+  author={Islamov, Rustem and As, Yarden and Fatkhullin, Ilyas},
+  booktitle={Forty-second International Conference on Machine Learning}
+}
+```
